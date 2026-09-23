@@ -1,0 +1,732 @@
+{
+  "summary": {
+    "total": 80,
+    "passed": 80,
+    "failed": 0,
+    "skipped": 0,
+    "pass_rate": 100.0
+  },
+  "total_time_ms": 23790.957800003525,
+  "results": [
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.1.1",
+      "description": "Config missing file returns default",
+      "status": "PASS",
+      "duration_ms": 1.3542000015149824,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.1.2",
+      "description": "Config corrupt JSON recovers gracefully",
+      "status": "PASS",
+      "duration_ms": 2.309100003913045,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.1.3",
+      "description": "Config invalid mode resets to auto",
+      "status": "PASS",
+      "duration_ms": 3.048599995963741,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.1.4",
+      "description": "Config nested dataclass hydration",
+      "status": "PASS",
+      "duration_ms": 1.7780999987735413,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.1.5",
+      "description": "Config save & reload roundtrip",
+      "status": "PASS",
+      "duration_ms": 1.9845999995595776,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.1.6",
+      "description": "Config rule_for case-insensitive & enabled check",
+      "status": "PASS",
+      "duration_ms": 0.012099997547920793,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.1.7",
+      "description": "Config uplink auto-creates missing entry",
+      "status": "PASS",
+      "duration_ms": 0.004900000931229442,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.2.1",
+      "description": "human_bps bit rate formatting and clamping",
+      "status": "PASS",
+      "duration_ms": 0.01049999991664663,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.2.2",
+      "description": "human_bytes byte size formatting and clamping",
+      "status": "PASS",
+      "duration_ms": 0.007999995432328433,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.3.1",
+      "description": "SWRR equal 100:100 weight distribution",
+      "status": "PASS",
+      "duration_ms": 0.5590000000665896,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.3.2",
+      "description": "SWRR 300:100 ratio distribution",
+      "status": "PASS",
+      "duration_ms": 0.7855000003473833,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.3.3",
+      "description": "SWRR handles 0 and 1 healthy uplinks",
+      "status": "PASS",
+      "duration_ms": 0.01219999830937013,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.3.4",
+      "description": "SWRR smooth interleaving pattern (no bursting)",
+      "status": "PASS",
+      "duration_ms": 0.02600000152597204,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.4.1",
+      "description": "Uplink state machine threshold transitions",
+      "status": "PASS",
+      "duration_ms": 0.009700001101009548,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.4.2",
+      "description": "Uplink loss percentage calculation",
+      "status": "PASS",
+      "duration_ms": 0.004900000931229442,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.4.3",
+      "description": "Interleaved OK/FAIL prevents state flapping",
+      "status": "PASS",
+      "duration_ms": 0.004199995601084083,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.5.1",
+      "description": "Preferred uplink ranking (wired/weight/RTT/force)",
+      "status": "PASS",
+      "duration_ms": 590.3183000045829,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.6.1",
+      "description": "Metric assignment ordering calculation",
+      "status": "PASS",
+      "duration_ms": 0.03289999585831538,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
+      "name": "1.7.1",
+      "description": "netutil as_list, parse_json_loose, socket_options_for",
+      "status": "PASS",
+      "duration_ms": 0.04199999966658652,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 2: Read-Only Network Tests (Zero Risk)",
+      "name": "2.1.1",
+      "description": "PowerShellSession run, run_json, multi-line base64",
+      "status": "PASS",
+      "duration_ms": 275.21929999784334,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 2: Read-Only Network Tests (Zero Risk)",
+      "name": "2.2.1",
+      "description": "AdapterManager enumerate physical and routable NICs",
+      "status": "PASS",
+      "duration_ms": 1000.8709999965504,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 2: Read-Only Network Tests (Zero Risk)",
+      "name": "2.2.2",
+      "description": "AdapterManager filters virtual and TAP/Hyper-V adapters",
+      "status": "PASS",
+      "duration_ms": 0.016500001947861165,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 2: Read-Only Network Tests (Zero Risk)",
+      "name": "2.3.1",
+      "description": "Read-only TCP probe pinned to active NIC",
+      "status": "PASS",
+      "duration_ms": 128.08200000290526,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 2: Read-Only Network Tests (Zero Risk)",
+      "name": "2.4.1",
+      "description": "ProcessResolver maps local TCP port to PID and exe",
+      "status": "PASS",
+      "duration_ms": 2.5355000034323893,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 2: Read-Only Network Tests (Zero Risk)",
+      "name": "2.4.2",
+      "description": "ProcessResolver cache eviction at 512 entries",
+      "status": "PASS",
+      "duration_ms": 0.1053000014508143,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 2: Read-Only Network Tests (Zero Risk)",
+      "name": "2.4.3",
+      "description": "ProcessResolver dead PID returns empty string",
+      "status": "PASS",
+      "duration_ms": 0.029499999072868377,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 2: Read-Only Network Tests (Zero Risk)",
+      "name": "2.5.1",
+      "description": "ThroughputMonitor starts, samples rates, stops cleanly",
+      "status": "PASS",
+      "duration_ms": 1206.6191999983857,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 3: Localhost-Only Tests (Zero Risk)",
+      "name": "3.1.1",
+      "description": "RuleEngine add_rule, account, remove_rule",
+      "status": "PASS",
+      "duration_ms": 0.04199999966658652,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 3: Localhost-Only Tests (Zero Risk)",
+      "name": "3.2.1",
+      "description": "SourcePortPool round-robin cycling",
+      "status": "PASS",
+      "duration_ms": 0.014299999747890979,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 3: Localhost-Only Tests (Zero Risk)",
+      "name": "3.3.1",
+      "description": "MultiWanProxy start, SOCKS5 greeting, HTTP protocol, stop",
+      "status": "PASS",
+      "duration_ms": 547.9991000029258,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 3: Localhost-Only Tests (Zero Risk)",
+      "name": "3.3.2",
+      "description": "HTTP Host header parsing with and without port",
+      "status": "PASS",
+      "duration_ms": 0.054100004490464926,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 3: Localhost-Only Tests (Zero Risk)",
+      "name": "3.3.3",
+      "description": "ProxyStats bump metrics and counters",
+      "status": "PASS",
+      "duration_ms": 0.024400003894697875,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 3: Localhost-Only Tests (Zero Risk)",
+      "name": "3.3.4",
+      "description": "SOCKS5 rejects unsupported command with 0x07",
+      "status": "PASS",
+      "duration_ms": 355.22800000035204,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 4: Controlled Network & Downloader Tests (Safe)",
+      "name": "4.1.1",
+      "description": "Clear-DnsClientCache execution via AdapterManager",
+      "status": "PASS",
+      "duration_ms": 471.1968999981764,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 4: Controlled Network & Downloader Tests (Safe)",
+      "name": "4.2.1",
+      "description": "SegmentedDownload range probing, chunking, and hash verification",
+      "status": "PASS",
+      "duration_ms": 651.6755999982706,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 4: Controlled Network & Downloader Tests (Safe)",
+      "name": "4.2.2",
+      "description": "SegmentedDownload small file (<1MB) single-stream fallback",
+      "status": "PASS",
+      "duration_ms": 634.9349000010989,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 4: Controlled Network & Downloader Tests (Safe)",
+      "name": "4.3.1",
+      "description": "AdapterManager backup_metrics preserves original states",
+      "status": "PASS",
+      "duration_ms": 126.64090000180295,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 5: Integration & Resilience Tests",
+      "name": "5.1.1",
+      "description": "Services start and stop lifecycle",
+      "status": "PASS",
+      "duration_ms": 158.14140000293264,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 5: Integration & Resilience Tests",
+      "name": "5.1.2",
+      "description": "Services proxy_enabled=False does not launch proxy listener",
+      "status": "PASS",
+      "duration_ms": 123.08779999875696,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 5: Integration & Resilience Tests",
+      "name": "5.1.3",
+      "description": "Services stop is idempotent (multiple calls safe)",
+      "status": "PASS",
+      "duration_ms": 180.1491999940481,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 5: Integration & Resilience Tests",
+      "name": "5.2.1",
+      "description": "Single-instance named mutex detection",
+      "status": "PASS",
+      "duration_ms": 6.228099999134429,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 5: Integration & Resilience Tests",
+      "name": "5.3.1",
+      "description": "is_admin elevation check function",
+      "status": "PASS",
+      "duration_ms": 0.8447000000160187,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.1.1",
+      "description": "SWRR weight=0 clamped to 1 distributes evenly",
+      "status": "PASS",
+      "duration_ms": 0.2491000050213188,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.1.2",
+      "description": "SWRR 3-link 200:100:50 distribution",
+      "status": "PASS",
+      "duration_ms": 0.9867000044323504,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.1.3",
+      "description": "SWRR stale _rr_state key after uplink removal",
+      "status": "PASS",
+      "duration_ms": 0.06939999730093405,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.2.1",
+      "description": "select_for_new_connection dead rule target spills to failover",
+      "status": "PASS",
+      "duration_ms": 0.11010000162059441,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.2.2",
+      "description": "select_for_new_connection all links DOWN returns None",
+      "status": "PASS",
+      "duration_ms": 0.01479999627918005,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.2.3",
+      "description": "preferred_uplink in FORCE mode with forced link DOWN falls back",
+      "status": "PASS",
+      "duration_ms": 0.043199994252063334,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.3.1",
+      "description": "apply_routing deduplication guard skips unchanged mapping",
+      "status": "PASS",
+      "duration_ms": 28.83769999607466,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.3.2",
+      "description": "apply_routing with manage_metrics=False is a no-op",
+      "status": "PASS",
+      "duration_ms": 0.03650000144261867,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.4.1",
+      "description": "DownloadProgress.pct with total=0 returns 0 without ZeroDivisionError",
+      "status": "PASS",
+      "duration_ms": 0.007799993909429759,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.4.2",
+      "description": "DownloadProgress.pct partial returns correct percentage",
+      "status": "PASS",
+      "duration_ms": 0.0029000002541579306,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.4.3",
+      "description": "SegmentedDownload with empty uplinks list returns error",
+      "status": "PASS",
+      "duration_ms": 0.5747999966843054,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.5.1",
+      "description": "Config unknown future keys are silently ignored",
+      "status": "PASS",
+      "duration_ms": 1.8205000014859252,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.5.2",
+      "description": "Config concurrent save from 10 threads without corruption",
+      "status": "PASS",
+      "duration_ms": 7.961399998748675,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.5.3",
+      "description": "Config all modes roundtrip save/load",
+      "status": "PASS",
+      "duration_ms": 8.933600001910236,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.6.1",
+      "description": "_host_from_headers handles missing or malformed Host",
+      "status": "PASS",
+      "duration_ms": 0.012700002116616815,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.6.2",
+      "description": "_host_from_headers no-port Host defaults to 80",
+      "status": "PASS",
+      "duration_ms": 0.0026999987312592566,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.6.3",
+      "description": "ProxyStats bump with empty key is a no-op",
+      "status": "PASS",
+      "duration_ms": 0.004099994839634746,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.7.1",
+      "description": "ForceBindIP.is_risky detects all anti-cheat titles",
+      "status": "PASS",
+      "duration_ms": 0.043000000005122274,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.7.2",
+      "description": "ForceBindIP.is_risky returns False for safe apps",
+      "status": "PASS",
+      "duration_ms": 0.016099998902063817,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.7.3",
+      "description": "ForceBindIP.locate returns None gracefully when not installed",
+      "status": "PASS",
+      "duration_ms": 0.3619999988586642,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.8.1",
+      "description": "TransparentRedirector filter string contains correct port ranges",
+      "status": "PASS",
+      "duration_ms": 0.01930000144056976,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.8.2",
+      "description": "TransparentRedirector table eviction at 4096 entries",
+      "status": "PASS",
+      "duration_ms": 0.44630000047618523,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.8.3",
+      "description": "TransparentRedirector original_destination miss returns None",
+      "status": "PASS",
+      "duration_ms": 0.01049999991664663,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.9.1",
+      "description": "Uplink probe history capped at 20 entries",
+      "status": "PASS",
+      "duration_ms": 0.017700003809295595,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.9.2",
+      "description": "NicRate history deque respects maxlen=120",
+      "status": "PASS",
+      "duration_ms": 0.027599999157246202,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 6: Edge Cases & Boundary Testing (Zero Risk)",
+      "name": "6.9.3",
+      "description": "human_bps and human_bytes handle negative input gracefully",
+      "status": "PASS",
+      "duration_ms": 0.00549999822396785,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.1.1",
+      "description": "50 concurrent SOCKS5 handshakes all succeed",
+      "status": "PASS",
+      "duration_ms": 490.96280000230763,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.1.2",
+      "description": "200 rapid connect/disconnect cycles leave proxy healthy",
+      "status": "PASS",
+      "duration_ms": 1531.4125000004424,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.1.3",
+      "description": "SOCKS5 ATYP=3 domain handshake parsed correctly",
+      "status": "PASS",
+      "duration_ms": 501.76729999657255,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.2.1",
+      "description": "HTTP CONNECT tunnel enables bidirectional relay",
+      "status": "PASS",
+      "duration_ms": 639.0243999994709,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.2.2",
+      "description": "HTTP proxy absolute URI rewrite returns valid HTTP response",
+      "status": "PASS",
+      "duration_ms": 490.7817999992403,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.3.1",
+      "description": "SegmentedDownload cancel() mid-transfer stops workers and returns",
+      "status": "PASS",
+      "duration_ms": 670.7169000001159,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.3.2",
+      "description": "SegmentedDownload falls back to single-stream when server ignores Range",
+      "status": "PASS",
+      "duration_ms": 657.1857999952044,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.3.3",
+      "description": "SegmentedDownload retries failed chunks (3-attempt retry loop)",
+      "status": "PASS",
+      "duration_ms": 643.96719999786,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.4.1",
+      "description": "PowerShellSession auto-respawns after child process crash",
+      "status": "PASS",
+      "duration_ms": 427.90420000528684,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.4.2",
+      "description": "PowerShellSession raises PowerShellError on timeout",
+      "status": "PASS",
+      "duration_ms": 10026.474799997231,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.5.1",
+      "description": "Services stop->start->stop cycle without port conflicts",
+      "status": "PASS",
+      "duration_ms": 906.0366999983671,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 7: Concurrency & Resilience Tests (Localhost Only)",
+      "name": "7.5.2",
+      "description": "RouterEngine probe_round executes probes in parallel",
+      "status": "PASS",
+      "duration_ms": 280.7546999974875,
+      "error": "",
+      "details": ""
+    }
+  ]
+}

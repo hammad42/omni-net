@@ -1,0 +1,18 @@
+# OmniNet Multi-WAN Engine — Python 3.11 or 3.12 on Windows 10/11 x64
+# (3.13 works but pydivert wheels lag behind; stick to 3.12 if you want
+#  transparent capture.)
+
+PyQt6==6.7.1
+PyQt6-Qt6==6.7.2
+PyQt6-sip==13.8.0
+
+psutil==6.0.0
+requests==2.32.3
+urllib3==2.2.2
+
+# Optional — only needed for transparent capture (Settings ▸ Transparent mode).
+# Ships the WinDivert driver; install it deliberately, not by accident.
+pydivert==2.1.0
+
+# Build only
+pyinstaller==6.10.0
