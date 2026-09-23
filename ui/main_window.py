@@ -129,7 +129,8 @@ class MainWindow(QMainWindow):
         if name:
             self.cfg.forced_adapter = name
             if self.cfg.mode == MODE_FORCE:
-                self.svc.router.apply_routing(force=True)
+                self.svc.router.set_mode(MODE_FORCE, name)
+                save_config(self.cfg)
 
     def _sync_mode_buttons(self) -> None:
         for key, b in self.mode_buttons.items():
@@ -679,8 +680,11 @@ class MainWindow(QMainWindow):
             + (" · divert" if self.svc.redirector.running else ""))
 
         self._fill_rules_table()
+        mode_str = f"mode {self.cfg.mode}"
+        if not self.cfg.manage_metrics:
+            mode_str += " (metrics unmanaged!)"
         self.status.setText(
-            f"mode {self.cfg.mode}   ·   failovers {st.failovers}   ·   "
+            f"{mode_str}   ·   failovers {st.failovers}   ·   "
             f"failed dials {st.failed_conns}   ·   "
             f"preferred: {pref.display if pref else 'none'}")
         self._sync_mode_buttons()

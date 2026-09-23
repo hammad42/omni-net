@@ -250,6 +250,8 @@ class RouterEngine:
     def apply_routing(self, force: bool = False) -> None:
         """Push interface metrics so the preferred link wins the default route."""
         if not self.cfg.manage_metrics:
+            if force:
+                self.log_event("warning", "Metrics management is disabled in Settings; Windows default route not updated.")
             return
         pref = self.preferred_uplink()
         if pref is None:
