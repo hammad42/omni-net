@@ -489,7 +489,8 @@ class MainWindow(QMainWindow):
             return
         ups = self.svc.router.healthy_uplinks()
         if not ups:
-            self._on_event("error", "No healthy uplink")
+            self._on_event("error", "No healthy uplink available for download")
+            self.dl_info.setText("Error: No healthy uplinks available")
             return
         name = url.split("?")[0].rstrip("/").rsplit("/", 1)[-1] or "download.bin"
         dest = Path(self.dl_dest.text().strip() or ".") / name
@@ -500,6 +501,9 @@ class MainWindow(QMainWindow):
             connections_per_link=self.dl_conns.value())
         self.dl_start.setEnabled(False)
         self.dl_cancel.setEnabled(True)
+        self.dl_bar.setValue(0)
+        self.dl_split.setText("")
+        self.dl_info.setText(f"Connecting to server across {len(ups)} link(s)...")
         threading.Thread(target=self._download.run, daemon=True).start()
 
     def _on_progress(self, p: DownloadProgress) -> None:

@@ -106,6 +106,8 @@ class SegmentedDownload:
             r = s.get(self.url, headers={"Range": "bytes=0-0"},
                       stream=True, timeout=15, allow_redirects=True)
             try:
+                if r.url and r.url != self.url:
+                    self.url = r.url
                 if r.status_code == 206:
                     cr = r.headers.get("Content-Range", "")
                     total = int(cr.rsplit("/", 1)[-1]) if "/" in cr else 0
@@ -123,12 +125,14 @@ class SegmentedDownload:
         if not self.uplinks:
             self.progress.error = "no usable uplink"
             self.progress.finished = True
+            self._emit()
             return self.progress
         try:
             total, ranged = self.probe()
         except Exception as e:
             self.progress.error = f"probe failed: {e}"
             self.progress.finished = True
+            self._emit()
             return self.progress
 
         self.progress.total = total
