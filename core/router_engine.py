@@ -153,7 +153,16 @@ class RouterEngine:
             gone = set(self.uplinks) - set(live)
             for name in gone:
                 self.log_event("warning", f"Adapter removed: {name}")
+            added = set(live) - set(self.uplinks)
+            for name in added:
+                self.log_event("info", f"Adapter detected: {name}")
+            changed = bool(gone or added)
             self.uplinks = live
+        if changed and self.on_change:
+            try:
+                self.on_change()
+            except Exception:
+                pass
 
     def healthy_uplinks(self) -> List[Uplink]:
         with self._lock:
@@ -342,7 +351,7 @@ class RouterEngine:
             try:
                 # Re-enumerate adapters occasionally: USB dongles come and go and
                 # their ifIndex changes on every re-plug.
-                if t0 - last_sync > 10:
+                if t0 - last_sync > 4:
                     self.sync_uplinks()
                     last_sync = t0
 

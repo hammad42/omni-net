@@ -76,8 +76,10 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.status)
 
         self.svc.router.on_event = lambda lvl, msg: self.bridge.event.emit(lvl, msg)
+        self.svc.router.on_change = lambda: self.bridge.refreshed.emit()
         self.bridge.event.connect(self._on_event)
         self.bridge.progress.connect(self._on_progress)
+        self.bridge.refreshed.connect(self.sync_cards)
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
@@ -196,25 +198,62 @@ class MainWindow(QMainWindow):
         lay.addLayout(btns)
         return w
 
-    def rebuild_uplinks(self) -> None:
-        self.svc.router.sync_uplinks()
+    def _target_uplinks(self) -> List[Uplink]:
+        """Return the list of uplinks that should have cards on the dashboard.
+        Always displays all physical Ethernet ports (even if cable is currently unplugged),
+        plus any routable candidate adapters (e.g. connected Wi-Fi or USB dongles),
+        plus any card that is currently displayed on the dashboard so it doesn't vanish on disconnect.
+        """
+        all_ups = self.svc.router.uplinks
+        candidates = {u.name for u in self.svc.router.candidates()}
+        out: List[Uplink] = []
+        for name, u in all_ups.items():
+            if not u.enabled:
+                continue
+            is_wired_physical = not u.adapter.is_wifi and not u.adapter.virtual
+            if is_wired_physical or name in candidates or name in self.cards:
+                out.append(u)
+        return out or list(all_ups.values())
+
+    def sync_cards(self) -> None:
+        """Dynamically add, remove, and reorder cards as adapters appear, connect, or disconnect.
+        Preserves existing card instances and their sparkline trend history.
+        """
+        target_ups = self._target_uplinks()
+        target_names = [u.name for u in target_ups]
+        current_names = list(self.cards.keys())
+
+        if target_names == current_names:
+            return
+
+        # 1. Remove cards that are no longer on the system
+        for name in list(self.cards.keys()):
+            if name not in target_names:
+                card = self.cards.pop(name)
+                self.cards_grid.removeWidget(card)
+                card.setParent(None)
+                card.deleteLater()
+
+        # 2. Detach remaining cards from grid layout temporarily
         for i in reversed(range(self.cards_grid.count())):
             item = self.cards_grid.itemAt(i)
             if item and item.widget():
-                item.widget().setParent(None)
-        self.cards.clear()
+                self.cards_grid.removeWidget(item.widget())
 
-        ups = self.svc.router.candidates() or list(self.svc.router.uplinks.values())
-        for idx, u in enumerate(ups):
-            color = theme.UPLINK_COLORS[idx % len(theme.UPLINK_COLORS)]
-            card = UplinkCard(u.display, color)
-            self.cards[u.name] = card
+        # 3. Add or restore cards in target order
+        for idx, u in enumerate(target_ups):
+            card = self.cards.get(u.name)
+            if not card:
+                color = theme.UPLINK_COLORS[len(self.cards) % len(theme.UPLINK_COLORS)]
+                card = UplinkCard(u.display, color)
+                self.cards[u.name] = card
             self.cards_grid.addWidget(card, idx // 2, idx % 2)
 
+        # 4. Refresh target combos and weight settings
         cur = self.force_combo.currentData()
         self.force_combo.blockSignals(True)
         self.force_combo.clear()
-        for u in ups:
+        for u in target_ups:
             self.force_combo.addItem(u.display, u.name)
         if cur:
             i = self.force_combo.findData(cur)
@@ -229,6 +268,15 @@ class MainWindow(QMainWindow):
         self._refresh_target_combos()
         self._sync_mode_buttons()
         self._rebuild_weight_rows()
+
+    def rebuild_uplinks(self) -> None:
+        self.svc.router.sync_uplinks()
+        for i in reversed(range(self.cards_grid.count())):
+            item = self.cards_grid.itemAt(i)
+            if item and item.widget():
+                item.widget().setParent(None)
+        self.cards.clear()
+        self.sync_cards()
 
     def _repair_selected(self) -> None:
         name = self.force_combo.currentData()
@@ -600,6 +648,7 @@ class MainWindow(QMainWindow):
     # Periodic refresh
     # ------------------------------------------------------------------ #
     def refresh(self) -> None:
+        self.sync_cards()
         router = self.svc.router
         pref = router.preferred_uplink()
         names = []
