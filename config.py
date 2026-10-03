@@ -73,11 +73,12 @@ class Config:
     upstream_port_low: int = 50000
     upstream_port_high: int = 50999
 
-    probe_targets: List[str] = field(default_factory=lambda: ["1.1.1.1:443", "8.8.8.8:443"])
+    probe_targets: List[str] = field(default_factory=lambda: ["1.1.1.1:443", "8.8.8.8:443", "20.219.1.1:443", "20.43.132.128:443"])
     probe_interval_s: float = 3.0
     probe_timeout_s: float = 1.5
     fail_threshold: int = 2       # consecutive failed rounds before a link is DOWN
     recover_threshold: int = 2    # consecutive good rounds before a link is UP again
+    rtt_switch_threshold_ms: float = 130.0  # don't switch uplinks if current link RTT is below this
 
     manage_metrics: bool = True   # allow writing interface metrics
     allow_adapter_disable: bool = False  # PnP disable is off by default (risk of stuck states)

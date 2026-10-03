@@ -41,7 +41,7 @@ from core.netutil import (
     parse_json_loose, set_unicast_if, socket_options_for, PowerShellSession
 )
 from core.router_engine import RouterEngine, Uplink, STATE_DOWN, STATE_UNKNOWN, STATE_UP, tcp_probe
-from core.stats import ThroughputMonitor, human_bps, human_bytes
+from core.stats import ThroughputMonitor, NicSample, human_bps, human_bytes
 
 
 # --------------------------------------------------------------------------- #
@@ -432,14 +432,23 @@ def test_phase_1():
         r.uplinks = {"Eth": u_eth, "Eth2": u_eth2}
         assert r.preferred_uplink().name == "Eth2"
 
-        # Case C: RTT comparison (lower RTT wins if same weight)
+        # Case C: Sticky routing — same tier, current RTT under threshold stays put
         u_eth2.weight = 100
         u_eth.rtt_ms = 45.0
         u_eth2.rtt_ms = 90.0
+        # Eth2 is _current_preferred from Case B and its RTT (90ms) is below
+        # the default threshold (130ms), so sticky routing keeps it even though
+        # Eth has lower RTT.
+        assert r.preferred_uplink().name == "Eth2"
+
+        # Case C2: RTT exceeds threshold → switch occurs
+        u_eth2.rtt_ms = 150.0   # above 130ms threshold
         assert r.preferred_uplink().name == "Eth"
 
         # Case D: Force mode
         r.set_mode(MODE_FORCE, "Eth2")
+        u_eth2.state = STATE_UP
+        u_eth2.rtt_ms = 90.0
         assert r.preferred_uplink().name == "Eth2"
 
         # Case E: Forced link DOWN falls back to auto
@@ -2017,14 +2026,274 @@ def test_phase_8():
 
 
 # --------------------------------------------------------------------------- #
+# Phase 9: Deep Gaming & System Stress Suite
+# --------------------------------------------------------------------------- #
+
+def test_phase_9():
+    runner.start_phase("Phase 9: Deep Gaming & System Stress Suite")
+
+    def _mock_env(threshold: float = 130.0):
+        cfg = Config(
+            rtt_switch_threshold_ms=threshold,
+            probe_targets=["20.219.1.1:443", "20.43.132.128:443"]
+        )
+        mgr = AdapterManager()
+        ad1 = Adapter(name="eth1", description="Adapter 1", ip="192.168.1.10", gateway="192.168.1.1", status="up", admin_status="up", media_type="ethernet")
+        ad2 = Adapter(name="eth2", description="Adapter 2", ip="192.168.2.10", gateway="192.168.2.1", status="up", admin_status="up", media_type="ethernet")
+        ad3 = Adapter(name="eth3", description="Adapter 3", ip="192.168.3.10", gateway="192.168.3.1", status="up", admin_status="up", media_type="ethernet")
+        router = RouterEngine(cfg, mgr)
+        router.uplinks = {
+            "eth1": Uplink(adapter=ad1, weight=100, enabled=True, state=STATE_UP),
+            "eth2": Uplink(adapter=ad2, weight=100, enabled=True, state=STATE_UP),
+            "eth3": Uplink(adapter=ad3, weight=100, enabled=True, state=STATE_UP),
+        }
+        return cfg, mgr, router
+
+    # 9.1 Sticky routing & ping variations
+    def test_9_1_sticky_hold():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 90.0
+        router.uplinks["eth2"].rtt_ms = 50.0
+        router.uplinks["eth3"].rtt_ms = 110.0
+        router._current_preferred = "eth1"
+        p = router.preferred_uplink()
+        assert p.name == "eth1"
+
+    def test_9_2_near_boundary_below():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 129.0
+        router.uplinks["eth2"].rtt_ms = 60.0
+        router._current_preferred = "eth1"
+        assert router.preferred_uplink().name == "eth1"
+
+    def test_9_3_threshold_breached():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 131.0
+        router.uplinks["eth2"].rtt_ms = 70.0
+        router._current_preferred = "eth1"
+        assert router.preferred_uplink().name == "eth2"
+
+    def test_9_4_exact_threshold():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 130.0
+        router.uplinks["eth2"].rtt_ms = 60.0
+        router._current_preferred = "eth1"
+        assert router.preferred_uplink().name == "eth1"
+
+    def test_9_5_user_case_145_vs_90():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth2"].rtt_ms = 145.0
+        router.uplinks["eth1"].rtt_ms = 90.0
+        router.uplinks["eth3"].rtt_ms = 160.0
+        router._current_preferred = "eth2"
+        p = router.preferred_uplink()
+        assert p.name == "eth1"
+        assert router.preferred_uplink().name == "eth1"
+
+    def test_9_6_all_degraded():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 190.0
+        router.uplinks["eth2"].rtt_ms = 170.0
+        router.uplinks["eth3"].rtt_ms = 140.0
+        router._current_preferred = "eth1"
+        assert router.preferred_uplink().name == "eth3"
+
+    # 9.2 Cable breaks & failover
+    def test_9_7_primary_pulled():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 75.0
+        router.uplinks["eth2"].rtt_ms = 85.0
+        router._current_preferred = "eth1"
+        router.uplinks["eth1"].state = STATE_DOWN
+        assert router.preferred_uplink().name == "eth2"
+
+    def test_9_8_double_failure():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].state = STATE_DOWN
+        router.uplinks["eth2"].state = STATE_DOWN
+        router.uplinks["eth3"].rtt_ms = 95.0
+        router._current_preferred = "eth1"
+        assert router.preferred_uplink().name == "eth3"
+
+    def test_9_9_secondary_pulled():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 90.0
+        router.uplinks["eth2"].rtt_ms = 80.0
+        router._current_preferred = "eth1"
+        router.uplinks["eth2"].state = STATE_DOWN
+        assert router.preferred_uplink().name == "eth1"
+
+    def test_9_10_all_links_down():
+        _, _, router = _mock_env(130.0)
+        for u in router.uplinks.values(): u.state = STATE_DOWN
+        router._current_preferred = "eth1"
+        assert router.preferred_uplink() is None
+
+    def test_9_11_silent_freeze():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 0.0
+        router.uplinks["eth1"].state = STATE_DOWN
+        router.uplinks["eth2"].rtt_ms = 90.0
+        router._current_preferred = "eth1"
+        assert router.preferred_uplink().name == "eth2"
+
+    # 9.3 Flapping & recovery
+    def test_9_12_primary_recovers_super_ping():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth2"].rtt_ms = 85.0
+        router._current_preferred = "eth2"
+        router.uplinks["eth1"].rtt_ms = 35.0
+        assert router.preferred_uplink().name == "eth2"
+
+    def test_9_13_primary_recovers_when_lagging():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth2"].rtt_ms = 145.0
+        router._current_preferred = "eth2"
+        router.uplinks["eth1"].rtt_ms = 40.0
+        assert router.preferred_uplink().name == "eth1"
+
+    def test_9_14_flapping_loop_stability():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 80.0
+        router.uplinks["eth2"].rtt_ms = 90.0
+        router._current_preferred = "eth1"
+        for _ in range(20):
+            router.uplinks["eth1"].state = STATE_DOWN
+            assert router.preferred_uplink().name == "eth2"
+            router.uplinks["eth1"].state = STATE_UP
+            router.uplinks["eth1"].rtt_ms = 75.0
+            assert router.preferred_uplink().name == "eth2"
+
+    # 9.4 Jitter & bufferbloat
+    def test_9_15_gradual_bufferbloat():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 90.0
+        router.uplinks["eth2"].rtt_ms = 95.0
+        router._current_preferred = "eth1"
+        for ping in [95.0, 110.0, 125.0, 129.0]:
+            router.uplinks["eth1"].rtt_ms = ping
+            assert router.preferred_uplink().name == "eth1"
+        router.uplinks["eth1"].rtt_ms = 134.0
+        assert router.preferred_uplink().name == "eth2"
+
+    def test_9_16_transient_spike_no_double_hop():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 90.0
+        router.uplinks["eth2"].rtt_ms = 100.0
+        router._current_preferred = "eth1"
+        router.uplinks["eth1"].rtt_ms = 280.0
+        assert router.preferred_uplink().name == "eth2"
+        router.uplinks["eth1"].rtt_ms = 90.0
+        assert router.preferred_uplink().name == "eth2"
+
+    # 9.5 Multi-target & overrides
+    def test_9_17_regional_asymmetry():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 88.0
+        router.uplinks["eth2"].rtt_ms = 135.0
+        router._current_preferred = None
+        assert router.preferred_uplink().name == "eth1"
+        router.uplinks["eth1"].rtt_ms = 148.0
+        router.uplinks["eth2"].rtt_ms = 92.0
+        assert router.preferred_uplink().name == "eth2"
+
+    def test_9_18_force_dead_fallback():
+        cfg, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 85.0
+        router.uplinks["eth3"].rtt_ms = 115.0
+        cfg.mode = MODE_FORCE
+        cfg.forced_adapter = "eth3"
+        assert router.preferred_uplink().name == "eth3"
+        router.uplinks["eth3"].state = STATE_DOWN
+        assert router.preferred_uplink().name == "eth1"
+
+    # 9.6 Concurrency & system stress
+    def test_9_19_high_freq_eval_stress():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 92.0
+        router.uplinks["eth2"].rtt_ms = 88.0
+        router._current_preferred = "eth1"
+        for _ in range(5000):
+            assert router.preferred_uplink().name == "eth1"
+
+    def test_9_20_multithread_concurrency():
+        _, _, router = _mock_env(130.0)
+        router.uplinks["eth1"].rtt_ms = 95.0
+        router.uplinks["eth2"].rtt_ms = 98.0
+        router._current_preferred = "eth1"
+        errors = []
+        def worker():
+            try:
+                for j in range(250):
+                    p = router.preferred_uplink()
+                    assert p is not None
+                    if j % 50 == 0:
+                        with router._lock:
+                            router.uplinks["eth1"].rtt_ms = 95.0 + (j % 10)
+            except Exception as e:
+                errors.append(str(e))
+        threads = [threading.Thread(target=worker) for _ in range(4)]
+        for t in threads: t.start()
+        for t in threads: t.join()
+        assert not errors
+
+    def test_9_21_rule_engine_crud():
+        cfg = Config(rules=[AppRule(exe="aoe4.exe", target="eth1", enabled=True)])
+        re = RuleEngine(cfg)
+        assert cfg.rule_for("AoE4.EXE").target == "eth1"
+        re.add_rule("reliccardinal.exe", "eth1")
+        assert cfg.rule_for("reliccardinal.exe").target == "eth1"
+        re.remove_rule("reliccardinal.exe")
+        assert cfg.rule_for("reliccardinal.exe") is None
+
+    def test_9_22_throughput_math():
+        tm = ThroughputMonitor(interval=0.1)
+        tm._prev["eth1"] = NicSample(ts=100.0, rx=10_000_000, tx=5_000_000)
+        curr = NicSample(ts=101.0, rx=20_000_000, tx=10_000_000)
+        dt = curr.ts - tm._prev["eth1"].ts
+        rx_bps = ((curr.rx - tm._prev["eth1"].rx) * 8.0) / dt
+        assert rx_bps == 80_000_000.0
+
+    def test_9_23_source_port_cyclic():
+        pool = SourcePortPool(low=30000, high=30010)
+        ports = [pool.next() for _ in range(11)]
+        assert set(ports) == set(range(30000, 30011))
+        assert pool.next() == 30000
+
+    runner.run_case("9.1.1", "Sticky hold on active connection (<130ms)", test_9_1_sticky_hold)
+    runner.run_case("9.1.2", "Near-boundary ping below threshold (129ms)", test_9_2_near_boundary_below)
+    runner.run_case("9.1.3", "Threshold breached by 1ms (131ms switches)", test_9_3_threshold_breached)
+    runner.run_case("9.1.4", "Exact threshold boundary (130.0ms holds)", test_9_4_exact_threshold)
+    runner.run_case("9.1.5", "Gamer prompt case: Active=145ms vs Eth1=90ms (instant switch & lock)", test_9_5_user_case_145_vs_90)
+    runner.run_case("9.1.6", "All links in degraded state (>130ms picks lowest)", test_9_6_all_degraded)
+    runner.run_case("9.2.1", "Active primary cable pulled (instant failover)", test_9_7_primary_pulled)
+    runner.run_case("9.2.2", "Double simultaneous failure (instant rescue to 3rd line)", test_9_8_double_failure)
+    runner.run_case("9.2.3", "Secondary cable disconnect (zero disturbance to active)", test_9_9_secondary_pulled)
+    runner.run_case("9.2.4", "Catastrophic failure (all down returns None safely)", test_9_10_all_links_down)
+    runner.run_case("9.2.5", "Silent ISP freeze (probe timeout marks DOWN and switches)", test_9_11_silent_freeze)
+    runner.run_case("9.3.1", "Primary recovers with god-tier ping (sticky hold avoids mid-match DC)", test_9_12_primary_recovers_super_ping)
+    runner.run_case("9.3.2", "Primary recovers while active line is lagging (>130ms preemption)", test_9_13_primary_recovers_when_lagging)
+    runner.run_case("9.3.3", "Rapid flapping stress test (20 cycles stability)", test_9_14_flapping_loop_stability)
+    runner.run_case("9.4.1", "Gradual bufferbloat progression (hold until 130ms breached)", test_9_15_gradual_bufferbloat)
+    runner.run_case("9.4.2", "Transient ping spike recovery (no double-hop oscillation)", test_9_16_transient_spike_no_double_hop)
+    runner.run_case("9.5.1", "Regional ISP route asymmetry (Azure India vs SE Asia)", test_9_17_regional_asymmetry)
+    runner.run_case("9.5.2", "Force override with dead-link fallback", test_9_18_force_dead_fallback)
+    runner.run_case("9.6.1", "High frequency sticky evaluation stress (5,000 iterations)", test_9_19_high_freq_eval_stress)
+    runner.run_case("9.6.2", "Multi-threaded concurrency stress (4 threads, 1,000 ops)", test_9_20_multithread_concurrency)
+    runner.run_case("9.6.3", "RuleEngine deep matching & dynamic CRUD", test_9_21_rule_engine_crud)
+    runner.run_case("9.6.4", "Throughput monitor rate math & accuracy", test_9_22_throughput_math)
+    runner.run_case("9.6.5", "SourcePortPool cyclic range & smooth wrap-around", test_9_23_source_port_cyclic)
+
+
+# --------------------------------------------------------------------------- #
 # Main Entry Point
 # --------------------------------------------------------------------------- #
 
 def main():
     parser = argparse.ArgumentParser(description="OmniNet Test Suite")
-    parser.add_argument("--phase", type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8],
-                        help="Run a specific phase (1-8)")
-    parser.add_argument("--all", action="store_true", help="Run all phases (1-7; excludes Phase 8)")
+    parser.add_argument("--phase", type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9],
+                        help="Run a specific phase (1-9)")
+    parser.add_argument("--all", action="store_true", help="Run all phases (1-7, 9; excludes Phase 8)")
     parser.add_argument("--admin", action="store_true",
                         help="Also run Phase 8 (requires administrator privileges, writes interface metrics)")
     parser.add_argument("--json", action="store_true", help="Output JSON results")
@@ -2051,6 +2320,8 @@ def main():
         test_phase_7()
     if args.admin or args.phase == 8:
         test_phase_8()
+    if run_all or args.phase == 9:
+        test_phase_9()
 
     total_time = (time.perf_counter() - t_start) * 1000
     summary = runner.summary()

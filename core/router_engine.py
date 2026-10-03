@@ -112,6 +112,7 @@ class RouterEngine:
         self._lock = threading.RLock()
         self._rr_state: Dict[str, int] = {}
         self._last_applied: Dict[str, int] = {}
+        self._current_preferred: Optional[str] = None  # sticky routing: name of current preferred link
 
         self.on_change: Optional[Callable[[], None]] = None
         self.on_event: Optional[Callable[[str, str], None]] = None   # (level, message)
@@ -228,24 +229,58 @@ class RouterEngine:
     # Route policy
     # ------------------------------------------------------------------ #
     def preferred_uplink(self) -> Optional[Uplink]:
-        """The link the *system* default route should point at."""
+        """The link the *system* default route should point at.
+
+        Sticky routing: if the ranking would change *only* because of RTT
+        fluctuation (same wired/weight tier), keep the current link as long as
+        its RTT is below ``rtt_switch_threshold_ms``.  Switches caused by a
+        different wired/weight tier (e.g. weight increase, or wired vs wifi)
+        always happen immediately.
+        """
         healthy = self.healthy_uplinks()
         if not healthy:
+            self._current_preferred = None
             return None
 
         if self.cfg.mode == MODE_FORCE and self.cfg.forced_adapter:
             forced = self.uplinks.get(self.cfg.forced_adapter)
             if forced and forced.healthy:
+                self._current_preferred = forced.name
                 return forced
             # forced link is dead -> fall through to auto rather than go offline
             self.log_event("warning",
                            f"Forced adapter {self.cfg.forced_adapter} unavailable; using failover")
 
-        def rank(u: Uplink):
+        def _tier(u: Uplink):
+            """Wired/weight tier — everything except RTT."""
             wired = 0 if not u.adapter.is_wifi else 1
-            return (wired, -u.weight, u.rtt_ms or 9999)
+            return (wired, -u.weight)
 
-        return sorted(healthy, key=rank)[0]
+        def rank(u: Uplink):
+            return (*_tier(u), u.rtt_ms or 9999)
+
+        best = sorted(healthy, key=rank)[0]
+
+        # Sticky check: if the current preferred link is still healthy, in the
+        # same tier as the new best, and its RTT is below the threshold, keep
+        # it to avoid unnecessary switching due to minor RTT fluctuation.
+        if self._current_preferred and self._current_preferred != best.name:
+            current = self.uplinks.get(self._current_preferred)
+            if (current and current.healthy and current.rtt_ms > 0
+                    and current.rtt_ms <= self.cfg.rtt_switch_threshold_ms
+                    and _tier(current) == _tier(best)):
+                return current  # same tier, RTT still OK — stay put
+
+        if best.name != self._current_preferred:
+            old = self._current_preferred
+            self._current_preferred = best.name
+            if old:
+                old_u = self.uplinks.get(old)
+                self.log_event("info",
+                               f"Switching {old} ({old_u.rtt_ms if old_u else '?'}ms) "
+                               f"→ {best.display} ({best.rtt_ms}ms) "
+                               f"[threshold {self.cfg.rtt_switch_threshold_ms}ms]")
+        return best
 
     def apply_routing(self, force: bool = False) -> None:
         """Push interface metrics so the preferred link wins the default route."""

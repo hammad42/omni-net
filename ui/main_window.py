@@ -559,6 +559,35 @@ class MainWindow(QMainWindow):
         for c in (self.set_metrics, self.set_restore, self.set_transparent, self.set_tray):
             lay.addWidget(c)
 
+        # Probe target checkboxes
+        lay.addWidget(QLabel("Probe targets (RTT tested through each NIC to detect link health):"))
+        self._probe_targets_map = [
+            ("1.1.1.1:443",       "Cloudflare  (1.1.1.1:443)"),
+            ("8.8.8.8:443",       "Google DNS  (8.8.8.8:443)"),
+            ("20.219.1.1:443",    "Azure Central India / Pune  (20.219.1.1:443)"),
+            ("20.43.132.128:443", "Azure SE Asia / Singapore  (20.43.132.128:443)"),
+        ]
+        self.probe_checks: Dict[str, QCheckBox] = {}
+        for target, label in self._probe_targets_map:
+            cb = QCheckBox(label)
+            cb.setObjectName(f"probe_{target}")
+            cb.setChecked(target in self.cfg.probe_targets)
+            lay.addWidget(cb)
+            self.probe_checks[target] = cb
+
+        # RTT switch threshold
+        threshold_form = QFormLayout()
+        self.set_rtt_threshold = QSpinBox()
+        self.set_rtt_threshold.setRange(10, 500)
+        self.set_rtt_threshold.setSuffix(" ms")
+        self.set_rtt_threshold.setValue(int(self.cfg.rtt_switch_threshold_ms))
+        self.set_rtt_threshold.setToolTip(
+            "If the current link's RTT is below this threshold, OmniNet won't switch "
+            "to another link even if it has lower latency. Set higher for stability "
+            "(less switching), lower for responsiveness.")
+        threshold_form.addRow("RTT switch threshold", self.set_rtt_threshold)
+        lay.addLayout(threshold_form)
+
         lay.addWidget(QLabel("Link weights (share of new connections in Aggregate mode)"))
         self.weights_box = QVBoxLayout()
         holder = QWidget()
@@ -605,6 +634,15 @@ class MainWindow(QMainWindow):
         self.cfg.start_minimised = self.set_tray.isChecked()
         for name, sp in getattr(self, "weight_spins", {}).items():
             self.cfg.uplink(name).weight = sp.value()
+
+        # Rebuild probe_targets from checkboxes (preserve order; require ≥1)
+        selected = [t for t, cb in self.probe_checks.items() if cb.isChecked()]
+        if not selected:
+            self._on_event("warning", "At least one probe target must be selected — keeping previous targets")
+        else:
+            self.cfg.probe_targets = selected
+
+        self.cfg.rtt_switch_threshold_ms = float(self.set_rtt_threshold.value())
 
         want_transparent = self.set_transparent.isChecked()
         if want_transparent != self.cfg.transparent_mode:
