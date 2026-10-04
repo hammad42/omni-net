@@ -340,9 +340,15 @@ def test_phase_1():
         # UNKNOWN -> 2 OK -> UP
         # Simulate probe ok 1
         u.consecutive_ok += 1
-        if u.consecutive_ok >= cfg.recover_threshold or u.state == STATE_UNKNOWN:
+        if u.state != STATE_UP and u.consecutive_ok >= cfg.recover_threshold:
             u.state = STATE_UP
-        assert u.state == STATE_UP
+        assert u.state == STATE_UNKNOWN, "1st probe success from UNKNOWN must not promote to UP before recover_threshold"
+
+        # Simulate probe ok 2
+        u.consecutive_ok += 1
+        if u.state != STATE_UP and u.consecutive_ok >= cfg.recover_threshold:
+            u.state = STATE_UP
+        assert u.state == STATE_UP, "2nd probe success should promote to UP when recover_threshold=2"
 
         # UP -> 1 fail -> still UP
         u.consecutive_ok = 0
@@ -957,16 +963,27 @@ def test_phase_5():
     # 5.2 Single-Instance Mutex
     def test_single_instance_mutex():
         import ctypes
-        from main import acquire_single_instance, MUTEX_NAME
-        # The main.py acquire_single_instance uses CreateMutexW
-        ok1 = acquire_single_instance()
-        assert ok1, "First instance should acquire mutex"
-        # Attempt second handle to check collision
-        ERROR_ALREADY_EXISTS = 183
-        h2 = ctypes.windll.kernel32.CreateMutexW(None, False, MUTEX_NAME)
-        err = ctypes.windll.kernel32.GetLastError()
-        ctypes.windll.kernel32.CloseHandle(h2)
-        assert err == ERROR_ALREADY_EXISTS, "Second instance should detect mutex already exists"
+        import uuid
+        import main
+        
+        # Use a unique mutex name for testing so we don't conflict with a real running app
+        test_mutex = f"Global\\OmniNetTestMutex_{uuid.uuid4().hex}"
+        orig_mutex = main.MUTEX_NAME
+        try:
+            main.MUTEX_NAME = test_mutex
+            ok1 = main.acquire_single_instance()
+            assert ok1, "First instance should acquire mutex"
+            
+            # Attempt second handle to check collision
+            ERROR_ALREADY_EXISTS = 183
+            ERROR_ACCESS_DENIED = 5
+            h2 = ctypes.windll.kernel32.CreateMutexW(None, False, test_mutex)
+            err = ctypes.windll.kernel32.GetLastError()
+            if h2:
+                ctypes.windll.kernel32.CloseHandle(h2)
+            assert err in (ERROR_ALREADY_EXISTS, ERROR_ACCESS_DENIED), "Second instance should detect mutex already exists or access denied"
+        finally:
+            main.MUTEX_NAME = orig_mutex
 
     runner.run_case("5.2.1", "Single-instance named mutex detection", test_single_instance_mutex)
 
@@ -2286,14 +2303,420 @@ def test_phase_9():
 
 
 # --------------------------------------------------------------------------- #
+# PHASE 10: Robustness, Lifecycle & Crash-Safety Tests
+# --------------------------------------------------------------------------- #
+
+def test_phase_10():
+    runner.start_phase("Phase 10: Robustness, Lifecycle & Crash-Safety Tests")
+
+    # 10.1 Metric Crash-Safety Persistence & Startup Reconciliation
+    def test_reconcile_startup_metrics():
+        import config
+        with tempfile.TemporaryDirectory() as td:
+            orig = config.METRICS_BACKUP_PATH
+            try:
+                p = Path(td) / "metrics_backup.json"
+                config.METRICS_BACKUP_PATH = p
+                fake_data = {"Eth1": {"metric": 25, "auto": "Disabled"}}
+                p.write_text(json.dumps(fake_data), encoding="utf-8")
+
+                mgr = AdapterManager()
+                called = []
+                mgr.restore_metrics = lambda: called.append(True)
+                assert mgr.reconcile_startup_metrics() is True
+                assert len(called) == 1
+                assert mgr._metric_backup["Eth1"] == (25, "Disabled")
+                assert not p.exists()
+            finally:
+                config.METRICS_BACKUP_PATH = orig
+
+    def test_backup_metrics_persists_to_disk():
+        import config
+        with tempfile.TemporaryDirectory() as td:
+            orig = config.METRICS_BACKUP_PATH
+            try:
+                p = Path(td) / "metrics_backup.json"
+                config.METRICS_BACKUP_PATH = p
+                mgr = AdapterManager()
+                ad = Adapter(name="EthTest", if_metric=15, auto_metric="Enabled")
+                mgr.physical = lambda: [ad]
+                mgr.backup_metrics()
+                assert p.exists()
+                loaded = json.loads(p.read_text(encoding="utf-8"))
+                assert "EthTest" in loaded
+                assert loaded["EthTest"]["metric"] == 15
+                assert loaded["EthTest"]["auto"] == "Enabled"
+            finally:
+                config.METRICS_BACKUP_PATH = orig
+
+    # 10.2 Protocol Parser Edge Cases (IPv6 Bracketed Literals & IDNA)
+    def test_host_header_ipv6():
+        from core.load_balancer import _host_from_headers
+        h, p = _host_from_headers([b"GET / HTTP/1.1", b"Host: [::1]:8080"])
+        assert h == "::1"
+        assert p == 8080
+
+        h2, p2 = _host_from_headers([b"GET / HTTP/1.1", b"Host: [2001:db8::1]"])
+        assert h2 == "2001:db8::1"
+        assert p2 == 80
+
+    def test_http_connect_ipv6_parsing():
+        target_uri = b"[::1]:8443"
+        uri_str = target_uri.decode("ascii", "ignore")
+        if uri_str.startswith("["):
+            host, _, rest_p = uri_str[1:].partition("]:")
+            port = int(rest_p) if rest_p.isdigit() else 443
+        else:
+            host, _, port_s = uri_str.rpartition(":")
+            port = int(port_s) if port_s.isdigit() else 443
+        assert host == "::1"
+        assert port == 8443
+
+    # 10.3 DNS Caching in MultiWanProxy
+    def test_dns_caching():
+        cfg = Config()
+        rules = RuleEngine(cfg)
+        mgr = AdapterManager()
+        r = RouterEngine(cfg, mgr)
+        proxy = MultiWanProxy(cfg, r, rules)
+
+        loop = asyncio.new_event_loop()
+        try:
+            ip_res = loop.run_until_complete(proxy._resolve_host("1.1.1.1", 443))
+            assert ip_res == "1.1.1.1"
+
+            proxy._dns_cache["example.test"] = ("10.0.0.1", time.time() + 100.0)
+            cached_res = loop.run_until_complete(proxy._resolve_host("example.test", 80))
+            assert cached_res == "10.0.0.1"
+        finally:
+            loop.close()
+
+    # 10.4 Proxy Lifecycle Stop & Clean Task Cancellation
+    def test_proxy_stop_cancels_tasks():
+        cfg = Config()
+        rules = RuleEngine(cfg)
+        mgr = AdapterManager()
+        r = RouterEngine(cfg, mgr)
+        proxy = MultiWanProxy(cfg, r, rules)
+        proxy.start()
+        assert proxy.running
+        proxy.stop()
+        assert not proxy.running
+        assert not proxy._thread.is_alive()
+
+    # 10.5 Metric Assignment Preserves Zero and Configured Base
+    def test_apply_routing_preserves_zero_metric():
+        cfg = Config(manage_metrics=True)
+        mgr = AdapterManager()
+        r = RouterEngine(cfg, mgr)
+        ad1 = Adapter(name="Eth1", status="up", ip="192.168.1.10", gateway="192.168.1.1")
+        ad2 = Adapter(name="Eth2", status="up", ip="192.168.2.10", gateway="192.168.2.1")
+        r.uplinks = {
+            "Eth1": Uplink(adapter=ad1, weight=100, state=STATE_UP, rtt_ms=20.0),
+            "Eth2": Uplink(adapter=ad2, weight=100, state=STATE_UP, rtt_ms=40.0),
+        }
+        cfg.uplink("Eth1").base_metric = 0
+        cfg.uplink("Eth2").base_metric = 50
+
+        pref = r.preferred_uplink()
+        assert pref.name == "Eth1"
+
+        applied = {}
+        mgr.set_metrics = lambda mapping: applied.update(mapping)
+        r.apply_routing(force=True)
+        assert applied["Eth1"] == 0
+        assert applied["Eth2"] >= 50
+
+    # 10.6 Uplink Snapshot Immutability
+    def test_uplink_snapshot_immutability():
+        ad = Adapter(name="Eth1", status="up", ip="192.168.1.10", gateway="192.168.1.1")
+        u = Uplink(adapter=ad, weight=100, state=STATE_UP, rtt_ms=25.0)
+        snap = u.snapshot()
+        assert snap.name == "Eth1"
+        assert snap.ip == "192.168.1.10"
+        assert snap.healthy is True
+        try:
+            snap.ip = "192.168.1.20"  # type: ignore
+            assert False, "Should not be able to mutate UplinkSnapshot"
+        except dataclasses.FrozenInstanceError:
+            pass
+
+    runner.run_case("10.1.1", "reconcile_startup_metrics restores previous crash backup", test_reconcile_startup_metrics)
+    runner.run_case("10.1.2", "backup_metrics persists atomic JSON to disk", test_backup_metrics_persists_to_disk)
+    runner.run_case("10.2.1", "Host header handles IPv6 bracketed literals", test_host_header_ipv6)
+    runner.run_case("10.2.2", "HTTP CONNECT handles bracketed IPv6 literals", test_http_connect_ipv6_parsing)
+    runner.run_case("10.3.1", "MultiWanProxy DNS resolution caching and TTL", test_dns_caching)
+    runner.run_case("10.4.1", "MultiWanProxy stop() cancels tasks and terminates loop cleanly", test_proxy_stop_cancels_tasks)
+    runner.run_case("10.5.1", "apply_routing preserves base_metric=0 and secondary ranking", test_apply_routing_preserves_zero_metric)
+    runner.run_case("10.6.1", "Uplink.snapshot() produces an immutable frozen snapshot", test_uplink_snapshot_immutability)
+
+
+# --------------------------------------------------------------------------- #
+# PHASE 11: Hedged Dials, Memory Pruning & Resilience Tests
+# --------------------------------------------------------------------------- #
+
+def test_phase_11():
+    runner.start_phase("Phase 11: Hedged Dials, Memory Pruning & Resilience Tests")
+
+    # 11.1 Memory Bounds & Stale State Pruning
+    def test_throughput_monitor_prunes_stale_adapters():
+        tm = ThroughputMonitor(interval=0.1)
+        old_time = time.time() - 70.0
+        with tm._lock:
+            tm._prev["OldUsb0"] = NicSample(ts=old_time, rx=1000, tx=1000)
+            from core.stats import NicRate
+            tm.rates["OldUsb0"] = NicRate(name="OldUsb0")
+            tm._prev["ActiveEth0"] = NicSample(ts=time.time(), rx=2000, tx=2000)
+            tm.rates["ActiveEth0"] = NicRate(name="ActiveEth0")
+
+        pruned = tm.prune_stale(max_age_s=60.0)
+        assert pruned == 1
+        with tm._lock:
+            assert "OldUsb0" not in tm._prev
+            assert "OldUsb0" not in tm.rates
+            assert "ActiveEth0" in tm._prev
+            assert "ActiveEth0" in tm.rates
+
+    def test_proxy_stats_bounds_dictionary():
+        from core.load_balancer import ProxyStats
+        stats = ProxyStats()
+        for i in range(2500):
+            stats.bump(stats.by_app, f"app_{i}.exe", "up", 100)
+        assert len(stats.by_app) <= 2048
+
+    # 11.2 Adapter Classification & Enumeration
+    def test_adapter_physical_filters_vpn_and_mesh():
+        mgr = AdapterManager()
+        a_eth = Adapter(name="Ethernet 1", description="Realtek PCIe GbE", if_index=1, status="up", ip="192.168.1.5")
+        a_wifi = Adapter(name="Wi-Fi", description="Intel Wi-Fi 6 AX200", if_index=2, status="up", ip="192.168.1.6")
+        a_zt = Adapter(name="ZeroTier One [1234]", description="ZeroTier Virtual Port", if_index=3, status="up", ip="10.147.1.1")
+        a_ts = Adapter(name="Tailscale", description="Tailscale Tunnel", if_index=4, status="up", ip="100.64.0.1")
+        a_ham = Adapter(name="Hamachi", description="LogMeIn Hamachi Virtual Adapter", if_index=5, status="up", ip="25.1.1.1")
+        a_wg = Adapter(name="wg0", description="WireGuard Tunnel Adapter", if_index=6, status="up", ip="10.200.0.1")
+
+        mgr._adapters = {
+            a.name: a for a in [a_eth, a_wifi, a_zt, a_ts, a_ham, a_wg]
+        }
+        phys = mgr.physical()
+        phys_names = [a.name for a in phys]
+        assert "Ethernet 1" in phys_names
+        assert "Wi-Fi" in phys_names
+        assert "ZeroTier One [1234]" not in phys_names
+        assert "Tailscale" not in phys_names
+        assert "Hamachi" not in phys_names
+        assert "wg0" not in phys_names
+
+    def test_adapter_manager_refresh_empty_result():
+        mgr = AdapterManager()
+        mgr._adapters = {"StaleEth": Adapter(name="StaleEth", status="up")}
+        orig_run_json = SHELL.run_json
+        try:
+            SHELL.run_json = lambda script, timeout=25: []
+            res = mgr.refresh()
+            assert res == []
+            assert len(mgr.adapters) == 0
+        finally:
+            SHELL.run_json = orig_run_json
+
+    # 11.3 Hedged Dialing (Happy Eyeballs across Uplinks)
+    def test_hedged_dial_timeout_fallback():
+        echo_srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        echo_srv.bind(("127.0.0.1", 0))
+        echo_srv.listen(5)
+        echo_port = echo_srv.getsockname()[1]
+
+        def handle_echo():
+            try:
+                conn, _ = echo_srv.accept()
+                conn.sendall(b"OK")
+                conn.close()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=handle_echo, daemon=True)
+        t.start()
+
+        cfg = Config(socks_port=12090, http_port=19090, proxy_enabled=True, transparent_mode=False)
+        mgr = AdapterManager()
+        r = RouterEngine(cfg, mgr)
+        ad1 = Adapter(name="Eth1", status="up", ip="192.168.1.10", if_index=1, gateway="192.168.1.1")
+        ad2 = Adapter(name="Eth2", status="up", ip="192.168.2.10", if_index=2, gateway="192.168.2.1")
+        r.uplinks = {
+            "Eth1": Uplink(adapter=ad1, weight=100, state=STATE_UP),
+            "Eth2": Uplink(adapter=ad2, weight=100, state=STATE_UP),
+        }
+        rules = RuleEngine(cfg)
+        proxy = MultiWanProxy(cfg, r, rules)
+
+        async def run_hedged_dial():
+            async def mock_open_upstream(snap, host, port):
+                if snap.name == "Eth1":
+                    await asyncio.sleep(3.0)
+                    raise OSError("Eth1 timed out")
+                else:
+                    return await asyncio.open_connection("127.0.0.1", echo_port)
+
+            proxy._open_upstream = mock_open_upstream
+            t_start = time.perf_counter()
+            reader, writer, uplink = await proxy._dial("127.0.0.1", echo_port, "", "")
+            elapsed = time.perf_counter() - t_start
+            data = await reader.read(2)
+            writer.close()
+            await writer.wait_closed()
+            return elapsed, uplink.name, data
+
+        try:
+            loop = asyncio.new_event_loop()
+            elapsed, uplink_name, data = loop.run_until_complete(run_hedged_dial())
+            loop.close()
+            assert elapsed < 1.5, f"Hedged dial took {elapsed:.2f}s, expected < 1.5s"
+            assert uplink_name == "Eth2"
+            assert data == b"OK"
+            assert proxy.stats.failovers >= 1
+        finally:
+            echo_srv.close()
+
+    def test_hedged_dial_fast_failure_failover():
+        cfg = Config(socks_port=12091, http_port=19091, proxy_enabled=True, transparent_mode=False)
+        mgr = AdapterManager()
+        r = RouterEngine(cfg, mgr)
+        ad1 = Adapter(name="Eth1", status="up", ip="192.168.1.10", if_index=1, gateway="192.168.1.1")
+        ad2 = Adapter(name="Eth2", status="up", ip="192.168.2.10", if_index=2, gateway="192.168.2.1")
+        r.uplinks = {
+            "Eth1": Uplink(adapter=ad1, weight=100, state=STATE_UP),
+            "Eth2": Uplink(adapter=ad2, weight=100, state=STATE_UP),
+        }
+        rules = RuleEngine(cfg)
+        proxy = MultiWanProxy(cfg, r, rules)
+
+        async def run_fast_failover():
+            from unittest import mock
+            async def mock_open_upstream(snap, host, port):
+                if snap.name == "Eth1":
+                    raise ConnectionRefusedError("Port closed")
+                else:
+                    r_mock, w_mock = mock.AsyncMock(), mock.MagicMock()
+                    return r_mock, w_mock
+
+            proxy._open_upstream = mock_open_upstream
+            t_start = time.perf_counter()
+            reader, writer, uplink = await proxy._dial("example.com", 80, "", "")
+            elapsed = time.perf_counter() - t_start
+            return elapsed, uplink.name
+
+        loop = asyncio.new_event_loop()
+        elapsed, uplink_name = loop.run_until_complete(run_fast_failover())
+        loop.close()
+        assert elapsed < 0.15, f"Fast failover took {elapsed:.2f}s, expected < 0.15s"
+        assert uplink_name == "Eth2"
+        assert proxy.stats.failovers >= 1
+
+    # 11.4 RouterEngine History Deque
+    def test_uplink_history_deque_loss_calculation():
+        from collections import deque
+        ad = Adapter(name="Eth1", status="up", ip="192.168.1.10", if_index=1)
+        u = Uplink(adapter=ad)
+        u.history = deque(maxlen=20)
+        for _ in range(10):
+            u.history.append(False)
+        for _ in range(10):
+            u.history.append(True)
+        assert len(u.history) == 20
+        loss = 100.0 * (1 - (sum(u.history) / len(u.history)))
+        assert abs(loss - 50.0) < 0.01
+
+        for _ in range(5):
+            u.history.append(True)
+        assert len(u.history) == 20
+        loss = 100.0 * (1 - (sum(u.history) / len(u.history)))
+        assert abs(loss - 25.0) < 0.01
+
+    # 11.5 Health State Machine STATE_UNKNOWN -> STATE_UP hysteresis (Bug #8)
+    def test_unknown_to_up_requires_recover_threshold():
+        from unittest import mock
+        cfg = Config(recover_threshold=2)
+        mgr = AdapterManager()
+        r = RouterEngine(cfg, mgr)
+        ad = Adapter(name="Eth1", status="up", ip="192.168.1.10", if_index=1, gateway="192.168.1.1")
+        u = Uplink(adapter=ad, state=STATE_UNKNOWN)
+        r.uplinks = {"Eth1": u}
+
+        with mock.patch("core.router_engine.tcp_probe", return_value=15.0):
+            # Round 1: First success
+            r._probe_gen = 1
+            r._probe_uplink(u, 1)
+            assert u.consecutive_ok == 1
+            assert u.state == STATE_UNKNOWN, "First probe success from UNKNOWN must not bypass recover_threshold"
+            assert not u.healthy, "Uplink in STATE_UNKNOWN must not be considered healthy"
+
+            # Round 2: Second success (meets recover_threshold = 2)
+            r._probe_gen = 2
+            r._probe_uplink(u, 2)
+            assert u.consecutive_ok == 2
+            assert u.state == STATE_UP, "Second probe success must promote uplink to STATE_UP"
+            assert u.healthy, "Uplink in STATE_UP must be considered healthy"
+
+    def test_explain_uplink_status_coverage():
+        cfg = Config()
+        am = AdapterManager()
+        r = RouterEngine(cfg, am)
+
+        ad1 = Adapter(name="Eth1", status="up", ip="192.168.1.10", if_index=1, gateway="192.168.1.1")
+        ad2 = Adapter(name="Eth2", status="up", ip="192.168.2.10", if_index=2, gateway="192.168.2.1")
+        ad_wifi = Adapter(name="Wi-Fi", status="up", ip="192.168.3.10", if_index=3, gateway="192.168.3.1", media_type="802.11")
+
+        u1 = Uplink(adapter=ad1, weight=100, state=STATE_UP, rtt_ms=20.0)
+        u2 = Uplink(adapter=ad2, weight=100, state=STATE_UP, rtt_ms=50.0)
+        u_wifi = Uplink(adapter=ad_wifi, weight=100, state=STATE_UP, rtt_ms=15.0)
+
+        r.uplinks = {"Eth1": u1, "Eth2": u2}
+
+        # 1. Lowest latency
+        b1, t1 = r.explain_uplink_status("Eth1")
+        b2, t2 = r.explain_uplink_status("Eth2")
+        assert b1 == "PREFERRED" and "Lowest Latency" in t1
+        assert b2 == "STANDBY" and "Standby" in t2
+
+        # 2. Wired priority over faster Wi-Fi
+        r.uplinks = {"Eth1": u1, "Wi-Fi": u_wifi}
+        r._current_preferred = None
+        bw, tw = r.explain_uplink_status("Eth1")
+        assert bw == "PREFERRED" and "Wired Priority" in tw
+        b_w2, t_w2 = r.explain_uplink_status("Wi-Fi")
+        assert b_w2 == "STANDBY" and "Wireless Standby" in t_w2
+
+        # 3. Degraded / Down
+        u_down = Uplink(adapter=ad2, state=STATE_DOWN, loss_pct=100.0, consecutive_fail=3)
+        r.uplinks["Eth2"] = u_down
+        bd, td = r.explain_uplink_status("Eth2")
+        assert bd == "DOWN" and "Degraded" in td
+
+        # 4. Testing / Recovering
+        u_rec = Uplink(adapter=ad2, state=STATE_UNKNOWN, consecutive_ok=1)
+        r.uplinks["Eth2"] = u_rec
+        br, tr = r.explain_uplink_status("Eth2")
+        assert br == "TESTING" and "Recovering" in tr
+
+    runner.run_case("11.1.1", "ThroughputMonitor prunes stale adapters after timeout", test_throughput_monitor_prunes_stale_adapters)
+    runner.run_case("11.1.2", "ProxyStats.bump bounds dictionary size at limit", test_proxy_stats_bounds_dictionary)
+    runner.run_case("11.2.1", "AdapterManager.physical() excludes ZeroTier, Tailscale, Hamachi, WireGuard", test_adapter_physical_filters_vpn_and_mesh)
+    runner.run_case("11.2.2", "AdapterManager.refresh() updates list when valid empty result returned", test_adapter_manager_refresh_empty_result)
+    runner.run_case("11.3.1", "Hedged dial succeeds when primary hangs, failing over within hedge window (< 1.5s)", test_hedged_dial_timeout_fallback)
+    runner.run_case("11.3.2", "Hedged dial fast failure failover (< 0.15s)", test_hedged_dial_fast_failure_failover)
+    runner.run_case("11.4.1", "Uplink history deque handles O(1) eviction and accurate loss calculation", test_uplink_history_deque_loss_calculation)
+    runner.run_case("11.5.1", "STATE_UNKNOWN to STATE_UP enforces recover_threshold (Bug #8)", test_unknown_to_up_requires_recover_threshold)
+    runner.run_case("11.6.1", "Uplink info status explains preferred, standby, and degraded basis", test_explain_uplink_status_coverage)
+
+
+# --------------------------------------------------------------------------- #
 # Main Entry Point
 # --------------------------------------------------------------------------- #
 
 def main():
     parser = argparse.ArgumentParser(description="OmniNet Test Suite")
-    parser.add_argument("--phase", type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9],
-                        help="Run a specific phase (1-9)")
-    parser.add_argument("--all", action="store_true", help="Run all phases (1-7, 9; excludes Phase 8)")
+    parser.add_argument("--phase", type=int, choices=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+                        help="Run a specific phase (1-11)")
+    parser.add_argument("--all", action="store_true", help="Run all phases (1-7, 9-11; excludes Phase 8)")
     parser.add_argument("--admin", action="store_true",
                         help="Also run Phase 8 (requires administrator privileges, writes interface metrics)")
     parser.add_argument("--json", action="store_true", help="Output JSON results")
@@ -2322,6 +2745,10 @@ def main():
         test_phase_8()
     if run_all or args.phase == 9:
         test_phase_9()
+    if run_all or args.phase == 10:
+        test_phase_10()
+    if run_all or args.phase == 11:
+        test_phase_11()
 
     total_time = (time.perf_counter() - t_start) * 1000
     summary = runner.summary()

@@ -80,6 +80,12 @@ class ThroughputMonitor:
             return
         agg_rx = agg_tx = 0.0
         with self._lock:
+            # Prune adapters not seen for > 60 seconds (prevents unbounded memory leak on USB churn)
+            stale_names = [n for n, s in self._prev.items() if (now - s.ts) > 60.0 and n not in counters]
+            for n in stale_names:
+                self._prev.pop(n, None)
+                self.rates.pop(n, None)
+
             for name, c in counters.items():
                 cur = NicSample(now, c.bytes_recv, c.bytes_sent)
                 prev = self._prev.get(name)
@@ -95,6 +101,18 @@ class ThroughputMonitor:
                     agg_tx += rate.tx_bps
             if agg_rx or agg_tx:
                 self.aggregate.append((agg_rx, agg_tx))
+
+    def prune_stale(self, max_age_s: float = 60.0) -> int:
+        """Prune any cached adapter rates older than max_age_s."""
+        now = time.time()
+        pruned = 0
+        with self._lock:
+            stale = [n for n, s in self._prev.items() if (now - s.ts) > max_age_s]
+            for n in stale:
+                self._prev.pop(n, None)
+                self.rates.pop(n, None)
+                pruned += 1
+        return pruned
 
     # ------------------------------------------------------------------ #
     def rate_for(self, name: str) -> NicRate:

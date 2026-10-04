@@ -25,7 +25,7 @@ class Services:
         self.rules = RuleEngine(self.cfg)
         self.stats = ThroughputMonitor()
         self.forcebind = ForceBindIP()
-        self.redirector = TransparentRedirector(self.cfg, self.cfg.socks_port + 1)
+        self.redirector = TransparentRedirector(self.cfg, self.cfg.transparent_port)
         self.proxy = MultiWanProxy(self.cfg, self.router, self.rules, self.redirector)
 
     def start(self) -> None:

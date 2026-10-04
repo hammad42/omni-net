@@ -89,5 +89,5 @@ QMenu::item {{ padding: 7px 24px 7px 14px; border-radius: 6px; }}
 QMenu::item:selected {{ background: {CARD_HI}; }}
 QMenu::separator {{ height: 1px; background: {BORDER}; margin: 5px 8px; }}
 
-QToolTip {{ background: {CARD}; color: {TEXT}; border: 1px solid {BORDER}; padding: 6px; }}
+QToolTip {{ background: {CARD_HI}; color: {TEXT}; border: 1px solid {ACCENT}; border-radius: 6px; padding: 6px 10px; font-size: 12px; }}
 """

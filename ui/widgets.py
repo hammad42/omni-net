@@ -126,10 +126,16 @@ class UplinkCard(QFrame):
         self.title.setStyleSheet("font-size: 14px; font-weight: 600;")
         self.badge = QLabel("")
         self.badge.setStyleSheet(f"color: {theme.TEXT_DIM}; font-size: 11px;")
+        self.info_icon = QLabel("ⓘ")
+        self.info_icon.setStyleSheet(
+            f"color: {theme.TEXT_DIM}; font-size: 12px; font-weight: bold; margin-left: 3px;"
+        )
+        self.info_icon.setCursor(Qt.CursorShape.PointingHandCursor)
         top.addWidget(self.dot)
         top.addWidget(self.title)
         top.addStretch(1)
         top.addWidget(self.badge)
+        top.addWidget(self.info_icon)
         lay.addLayout(top)
 
         self.desc = QLabel("")
@@ -158,13 +164,26 @@ class UplinkCard(QFrame):
     # ------------------------------------------------------------------ #
     def update_state(self, *, state: str, ip: str, gateway: str, description: str,
                      rtt: float, loss: float, metric: int, conns: int,
-                     down_bps: float, up_bps: float, preferred: bool) -> None:
+                     down_bps: float, up_bps: float, preferred: bool,
+                     badge_text: str = "", info_tooltip: str = "") -> None:
         col = {"up": theme.GREEN, "down": theme.RED}.get(state, theme.AMBER)
         self.dot.setStyleSheet(f"color: {col}; font-size: 15px;")
-        self.badge.setText("PREFERRED" if preferred else state.upper())
+        display_badge = badge_text if badge_text else ("PREFERRED" if preferred else state.upper())
+        self.badge.setText(display_badge)
+        badge_col = theme.ACCENT if preferred else (theme.GREEN if display_badge == "AGGREGATE" else theme.TEXT_DIM)
         self.badge.setStyleSheet(
-            f"color: {theme.ACCENT if preferred else theme.TEXT_DIM}; font-size: 11px;"
-            f" font-weight: {'700' if preferred else '400'};")
+            f"color: {badge_col}; font-size: 11px;"
+            f" font-weight: {'700' if preferred else '500'};")
+        self.info_icon.setStyleSheet(
+            f"color: {theme.ACCENT if preferred else theme.TEXT_DIM}; font-size: 12px;"
+            f" font-weight: bold; margin-left: 3px;")
+        if info_tooltip:
+            self.badge.setToolTip(info_tooltip)
+            self.info_icon.setToolTip(info_tooltip)
+        else:
+            self.badge.setToolTip("")
+            self.info_icon.setToolTip("")
+
         self.desc.setText(description)
         self.down_lbl.setText(f"↓ {human_bps(down_bps)}")
         self.up_lbl.setText(f"↑ {human_bps(up_bps)}")

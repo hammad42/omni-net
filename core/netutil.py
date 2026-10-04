@@ -69,11 +69,12 @@ def relaunch_as_admin() -> bool:
     Returns True if a new elevated process was started (caller should exit)."""
     if not IS_WINDOWS or is_admin():
         return False
-    params = " ".join(f'"{a}"' for a in sys.argv[1:])
+    params = " ".join(f'"{a.replace(chr(92), chr(92)*2).replace(chr(34), chr(92)+chr(34))}"' for a in sys.argv[1:])
     if getattr(sys, "frozen", False):
         exe, args = sys.executable, params
     else:
-        exe, args = sys.executable, f'"{os.path.abspath(sys.argv[0])}" {params}'
+        script = os.path.abspath(sys.argv[0]).replace(chr(92), chr(92)*2).replace(chr(34), chr(92)+chr(34))
+        exe, args = sys.executable, f'"{script}" {params}'
     rc = ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, args, None, 1)
     return int(rc) > 32
 
@@ -99,7 +100,8 @@ def set_unicast_if(sock: socket.socket, if_index: int) -> None:
 def bind_socket_to_uplink(sock: socket.socket,
                           src_ip: Optional[str],
                           if_index: Optional[int],
-                          src_port: int = 0) -> None:
+                          src_port: int = 0,
+                          allow_ephemeral_fallback: bool = True) -> None:
     """Force this socket out of a specific uplink, before connect()."""
     if if_index:
         set_unicast_if(sock, int(if_index))
@@ -107,7 +109,7 @@ def bind_socket_to_uplink(sock: socket.socket,
         try:
             sock.bind((src_ip, src_port))
         except OSError as e:
-            if src_port:          # port collision -> retry ephemeral
+            if src_port and allow_ephemeral_fallback:          # port collision -> retry ephemeral
                 sock.bind((src_ip, 0))
             else:
                 raise e
@@ -156,9 +158,14 @@ class PowerShellSession:
         self._write(self.PREAMBLE)
 
     def _write(self, line: str) -> None:
-        assert self._proc and self._proc.stdin
-        self._proc.stdin.write(line + "\n")
-        self._proc.stdin.flush()
+        proc = self._proc
+        if not proc or not proc.stdin:
+            raise PowerShellError("PowerShell session not running")
+        try:
+            proc.stdin.write(line + "\n")
+            proc.stdin.flush()
+        except (BrokenPipeError, OSError) as e:
+            raise PowerShellError(f"PowerShell pipe broken: {e}") from e
 
     def _alive(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
@@ -177,7 +184,7 @@ class PowerShellSession:
             self._proc = None
 
     # -- execution -------------------------------------------------------- #
-    def run(self, script: str, timeout: float = 20.0) -> str:
+    def run(self, script: str, timeout: float = 20.0, retry: bool = False) -> str:
         """Run a script block, return its stdout (stderr merged in)."""
         with self._lock:
             for attempt in (0, 1):
@@ -187,7 +194,7 @@ class PowerShellSession:
                     return self._run_once(script, timeout)
                 except PowerShellError:
                     self.close()
-                    if attempt:
+                    if attempt or not retry:
                         raise
             raise PowerShellError("unreachable")
 
@@ -203,17 +210,28 @@ class PowerShellSession:
         done = threading.Event()
         marker = f"@@OMNI_END:{token}"
 
+        proc = self._proc
+        if not proc or not proc.stdout:
+            raise PowerShellError("PowerShell session not running")
+        stdout = proc.stdout
+
         def reader() -> None:
-            assert self._proc and self._proc.stdout
-            while True:
-                line = self._proc.stdout.readline()
-                if line == "":
-                    break
-                if marker in line:
-                    done.set()
-                    return
-                out.append(line)
-            done.set()
+            try:
+                while True:
+                    line = stdout.readline()
+                    if not line:
+                        break
+                    if marker in line:
+                        prefix = line.split(marker)[0]
+                        if prefix:
+                            out.append(prefix)
+                        done.set()
+                        return
+                    out.append(line)
+            except Exception:
+                pass
+            finally:
+                done.set()
 
         t = threading.Thread(target=reader, daemon=True)
         t.start()
@@ -224,7 +242,7 @@ class PowerShellSession:
         return "".join(out)
 
     def run_json(self, script: str, timeout: float = 20.0) -> Any:
-        return parse_json_loose(self.run(script, timeout))
+        return parse_json_loose(self.run(script, timeout, retry=True))
 
 
 def parse_json_loose(text: str) -> Any:

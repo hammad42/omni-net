@@ -136,7 +136,7 @@ class AdapterManager:
                 continue
             if a.name:
                 found[a.name] = a
-        if found:
+        if data is not None:
             self._adapters = found
         return list(self._adapters.values())
 
@@ -148,13 +148,17 @@ class AdapterManager:
         return self._adapters.get(name)
 
     def physical(self) -> List[Adapter]:
-        """Skip Hyper-V switches, VPN taps, loopback, Bluetooth PAN etc."""
+        """Skip Hyper-V switches, VPN taps, loopback, Bluetooth PAN, Tailscale, ZeroTier etc."""
         out = []
+        skip_keywords = (
+            "loopback", "hyper-v", "tap-", "wan miniport", "bluetooth",
+            "virtualbox", "vmware", "wintun", "zerotier", "tailscale",
+            "hamachi", "wireguard"
+        )
         for a in self._adapters.values():
             d = (a.description or "").lower()
-            if a.virtual or any(k in d for k in
-                                ("loopback", "hyper-v", "tap-", "wan miniport",
-                                 "bluetooth", "virtualbox", "vmware", "wintun")):
+            n = (a.name or "").lower()
+            if a.virtual or any(k in d or k in n for k in skip_keywords):
                 continue
             out.append(a)
         return sorted(out, key=lambda x: (not x.is_routable, x.if_index))
@@ -166,9 +170,59 @@ class AdapterManager:
     # Metrics — the fast, safe way to steer the default route
     # ------------------------------------------------------------------ #
     def backup_metrics(self) -> None:
+        changed = False
         for a in self.physical():
             if a.name not in self._metric_backup and a.if_metric >= 0:
                 self._metric_backup[a.name] = (a.if_metric, a.auto_metric or "Enabled")
+                changed = True
+        if changed and self._metric_backup:
+            self._save_backup_to_disk()
+
+    def _save_backup_to_disk(self) -> None:
+        try:
+            import json
+            import config
+            path = config.METRICS_BACKUP_PATH
+            data = {name: {"metric": m, "auto": a} for name, (m, a) in self._metric_backup.items()}
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            tmp.replace(path)
+        except Exception as e:
+            log.warning("could not save metrics backup to disk: %s", e)
+
+    def _clear_backup_from_disk(self) -> None:
+        try:
+            import config
+            path = config.METRICS_BACKUP_PATH
+            if path.exists():
+                path.unlink()
+        except Exception:
+            pass
+
+    def reconcile_startup_metrics(self) -> bool:
+        """If a previous session crashed without restoring metrics, restore them now."""
+        try:
+            import json
+            import config
+            path = config.METRICS_BACKUP_PATH
+            if not path.exists():
+                return False
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict) or not data:
+                self._clear_backup_from_disk()
+                return False
+            self._metric_backup = {
+                name: (int(v.get("metric", 10)), str(v.get("auto", "Enabled")))
+                for name, v in data.items() if isinstance(v, dict)
+            }
+            log.info("reconciling %d un-restored metrics from previous crashed session", len(self._metric_backup))
+            self.restore_metrics()
+            self._clear_backup_from_disk()
+            return True
+        except Exception as e:
+            log.warning("failed to reconcile startup metrics: %s", e)
+            self._clear_backup_from_disk()
+            return False
 
     def set_metric(self, name: str, metric: int, both_families: bool = True) -> bool:
         """Set the interface metric. Lower == preferred. ~40 ms on a warm shell."""
@@ -212,6 +266,7 @@ class AdapterManager:
     def restore_metrics(self) -> None:
         """Put Windows back the way we found it — automatic metric on by default."""
         if not self._metric_backup:
+            self._clear_backup_from_disk()
             return
         parts = []
         for name, (metric, auto) in self._metric_backup.items():
@@ -230,6 +285,7 @@ class AdapterManager:
         except Exception as e:
             log.error("metric restore failed: %s", e)
         self._metric_backup.clear()
+        self._clear_backup_from_disk()
 
     # ------------------------------------------------------------------ #
     # Admin state — used sparingly

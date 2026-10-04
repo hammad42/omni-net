@@ -1,19 +1,19 @@
 {
   "summary": {
-    "total": 103,
-    "passed": 103,
+    "total": 118,
+    "passed": 118,
     "failed": 0,
     "skipped": 0,
     "pass_rate": 100.0
   },
-  "total_time_ms": 26087.011399999028,
+  "total_time_ms": 24515.993099979823,
   "results": [
     {
       "phase": "Phase 1: Pure Logic Tests (Zero Network Risk)",
       "name": "1.1.1",
       "description": "Config missing file returns default",
       "status": "PASS",
-      "duration_ms": 1.7009000002872199,
+      "duration_ms": 1.3292999938130379,
       "error": "",
       "details": ""
     },
@@ -22,7 +22,7 @@
       "name": "1.1.2",
       "description": "Config corrupt JSON recovers gracefully",
       "status": "PASS",
-      "duration_ms": 2.174699999159202,
+      "duration_ms": 2.481400006217882,
       "error": "",
       "details": ""
     },
@@ -31,7 +31,7 @@
       "name": "1.1.3",
       "description": "Config invalid mode resets to auto",
       "status": "PASS",
-      "duration_ms": 2.6375000015832484,
+      "duration_ms": 3.268000000389293,
       "error": "",
       "details": ""
     },
@@ -40,7 +40,7 @@
       "name": "1.1.4",
       "description": "Config nested dataclass hydration",
       "status": "PASS",
-      "duration_ms": 1.9820000161416829,
+      "duration_ms": 2.201800001785159,
       "error": "",
       "details": ""
     },
@@ -49,7 +49,7 @@
       "name": "1.1.5",
       "description": "Config save & reload roundtrip",
       "status": "PASS",
-      "duration_ms": 3.0048000044189394,
+      "duration_ms": 2.0586999889928848,
       "error": "",
       "details": ""
     },
@@ -58,7 +58,7 @@
       "name": "1.1.6",
       "description": "Config rule_for case-insensitive & enabled check",
       "status": "PASS",
-      "duration_ms": 0.0109999964479357,
+      "duration_ms": 0.010899995686486363,
       "error": "",
       "details": ""
     },
@@ -67,7 +67,7 @@
       "name": "1.1.7",
       "description": "Config uplink auto-creates missing entry",
       "status": "PASS",
-      "duration_ms": 0.004699977580457926,
+      "duration_ms": 0.019400002202019095,
       "error": "",
       "details": ""
     },
@@ -76,7 +76,7 @@
       "name": "1.2.1",
       "description": "human_bps bit rate formatting and clamping",
       "status": "PASS",
-      "duration_ms": 0.010100018698722124,
+      "duration_ms": 0.008800008799880743,
       "error": "",
       "details": ""
     },
@@ -85,7 +85,7 @@
       "name": "1.2.2",
       "description": "human_bytes byte size formatting and clamping",
       "status": "PASS",
-      "duration_ms": 0.006099988240748644,
+      "duration_ms": 0.005799985956400633,
       "error": "",
       "details": ""
     },
@@ -94,7 +94,7 @@
       "name": "1.3.1",
       "description": "SWRR equal 100:100 weight distribution",
       "status": "PASS",
-      "duration_ms": 0.4728000203613192,
+      "duration_ms": 0.4354999982751906,
       "error": "",
       "details": ""
     },
@@ -103,7 +103,7 @@
       "name": "1.3.2",
       "description": "SWRR 300:100 ratio distribution",
       "status": "PASS",
-      "duration_ms": 0.923299987334758,
+      "duration_ms": 0.7910999993328005,
       "error": "",
       "details": ""
     },
@@ -112,7 +112,7 @@
       "name": "1.3.3",
       "description": "SWRR handles 0 and 1 healthy uplinks",
       "status": "PASS",
-      "duration_ms": 0.06609997944906354,
+      "duration_ms": 0.014199991710484028,
       "error": "",
       "details": ""
     },
@@ -121,7 +121,7 @@
       "name": "1.3.4",
       "description": "SWRR smooth interleaving pattern (no bursting)",
       "status": "PASS",
-      "duration_ms": 0.03200001083314419,
+      "duration_ms": 0.03010002546943724,
       "error": "",
       "details": ""
     },
@@ -130,7 +130,7 @@
       "name": "1.4.1",
       "description": "Uplink state machine threshold transitions",
       "status": "PASS",
-      "duration_ms": 0.014600023860111833,
+      "duration_ms": 0.009899988071992993,
       "error": "",
       "details": ""
     },
@@ -139,7 +139,7 @@
       "name": "1.4.2",
       "description": "Uplink loss percentage calculation",
       "status": "PASS",
-      "duration_ms": 0.011800002539530396,
+      "duration_ms": 0.005600013537332416,
       "error": "",
       "details": ""
     },
@@ -148,7 +148,7 @@
       "name": "1.4.3",
       "description": "Interleaved OK/FAIL prevents state flapping",
       "status": "PASS",
-      "duration_ms": 0.006599992047995329,
+      "duration_ms": 0.0049000082071870565,
       "error": "",
       "details": ""
     },
@@ -157,7 +157,7 @@
       "name": "1.5.1",
       "description": "Preferred uplink ranking (wired/weight/RTT/force)",
       "status": "PASS",
-      "duration_ms": 788.4026000101585,
+      "duration_ms": 619.7578000137582,
       "error": "",
       "details": ""
     },
@@ -166,7 +166,7 @@
       "name": "1.6.1",
       "description": "Metric assignment ordering calculation",
       "status": "PASS",
-      "duration_ms": 0.06360001862049103,
+      "duration_ms": 0.03470000228844583,
       "error": "",
       "details": ""
     },
@@ -175,7 +175,7 @@
       "name": "1.7.1",
       "description": "netutil as_list, parse_json_loose, socket_options_for",
       "status": "PASS",
-      "duration_ms": 0.057600002037361264,
+      "duration_ms": 0.03670001751743257,
       "error": "",
       "details": ""
     },
@@ -184,7 +184,7 @@
       "name": "2.1.1",
       "description": "PowerShellSession run, run_json, multi-line base64",
       "status": "PASS",
-      "duration_ms": 330.02780002425425,
+      "duration_ms": 267.75610001641326,
       "error": "",
       "details": ""
     },
@@ -193,7 +193,7 @@
       "name": "2.2.1",
       "description": "AdapterManager enumerate physical and routable NICs",
       "status": "PASS",
-      "duration_ms": 1301.7209999961779,
+      "duration_ms": 1027.0711999910418,
       "error": "",
       "details": ""
     },
@@ -202,7 +202,7 @@
       "name": "2.2.2",
       "description": "AdapterManager filters virtual and TAP/Hyper-V adapters",
       "status": "PASS",
-      "duration_ms": 0.01580000389367342,
+      "duration_ms": 0.0323000131174922,
       "error": "",
       "details": ""
     },
@@ -211,7 +211,7 @@
       "name": "2.3.1",
       "description": "Read-only TCP probe pinned to active NIC",
       "status": "PASS",
-      "duration_ms": 214.30099999997765,
+      "duration_ms": 128.75040000653826,
       "error": "",
       "details": ""
     },
@@ -220,7 +220,7 @@
       "name": "2.4.1",
       "description": "ProcessResolver maps local TCP port to PID and exe",
       "status": "PASS",
-      "duration_ms": 2.43580000824295,
+      "duration_ms": 1.9365000189282,
       "error": "",
       "details": ""
     },
@@ -229,7 +229,7 @@
       "name": "2.4.2",
       "description": "ProcessResolver cache eviction at 512 entries",
       "status": "PASS",
-      "duration_ms": 0.24819999816827476,
+      "duration_ms": 0.14310001279227436,
       "error": "",
       "details": ""
     },
@@ -238,7 +238,7 @@
       "name": "2.4.3",
       "description": "ProcessResolver dead PID returns empty string",
       "status": "PASS",
-      "duration_ms": 0.05160001455806196,
+      "duration_ms": 0.035299977753311396,
       "error": "",
       "details": ""
     },
@@ -247,7 +247,7 @@
       "name": "2.5.1",
       "description": "ThroughputMonitor starts, samples rates, stops cleanly",
       "status": "PASS",
-      "duration_ms": 1210.3220999997575,
+      "duration_ms": 1207.1533999987878,
       "error": "",
       "details": ""
     },
@@ -256,7 +256,7 @@
       "name": "3.1.1",
       "description": "RuleEngine add_rule, account, remove_rule",
       "status": "PASS",
-      "duration_ms": 0.056199991377070546,
+      "duration_ms": 0.1060000213328749,
       "error": "",
       "details": ""
     },
@@ -265,7 +265,7 @@
       "name": "3.2.1",
       "description": "SourcePortPool round-robin cycling",
       "status": "PASS",
-      "duration_ms": 0.018099992303177714,
+      "duration_ms": 0.03860000288113952,
       "error": "",
       "details": ""
     },
@@ -274,7 +274,7 @@
       "name": "3.3.1",
       "description": "MultiWanProxy start, SOCKS5 greeting, HTTP protocol, stop",
       "status": "PASS",
-      "duration_ms": 610.3569999977481,
+      "duration_ms": 531.0383999894839,
       "error": "",
       "details": ""
     },
@@ -283,7 +283,7 @@
       "name": "3.3.2",
       "description": "HTTP Host header parsing with and without port",
       "status": "PASS",
-      "duration_ms": 0.03170000854879618,
+      "duration_ms": 0.05400000372901559,
       "error": "",
       "details": ""
     },
@@ -292,7 +292,7 @@
       "name": "3.3.3",
       "description": "ProxyStats bump metrics and counters",
       "status": "PASS",
-      "duration_ms": 0.011199997970834374,
+      "duration_ms": 0.025399989681318402,
       "error": "",
       "details": ""
     },
@@ -301,7 +301,7 @@
       "name": "3.3.4",
       "description": "SOCKS5 rejects unsupported command with 0x07",
       "status": "PASS",
-      "duration_ms": 352.6107000070624,
+      "duration_ms": 365.7608999928925,
       "error": "",
       "details": ""
     },
@@ -310,7 +310,7 @@
       "name": "4.1.1",
       "description": "Clear-DnsClientCache execution via AdapterManager",
       "status": "PASS",
-      "duration_ms": 601.3567000045441,
+      "duration_ms": 466.591000003973,
       "error": "",
       "details": ""
     },
@@ -319,7 +319,7 @@
       "name": "4.2.1",
       "description": "SegmentedDownload range probing, chunking, and hash verification",
       "status": "PASS",
-      "duration_ms": 751.8424000008963,
+      "duration_ms": 632.436800020514,
       "error": "",
       "details": ""
     },
@@ -328,7 +328,7 @@
       "name": "4.2.2",
       "description": "SegmentedDownload small file (<1MB) single-stream fallback",
       "status": "PASS",
-      "duration_ms": 715.3958999842871,
+      "duration_ms": 659.1083999956027,
       "error": "",
       "details": ""
     },
@@ -337,7 +337,7 @@
       "name": "4.3.1",
       "description": "AdapterManager backup_metrics preserves original states",
       "status": "PASS",
-      "duration_ms": 190.202900004806,
+      "duration_ms": 150.65560000948608,
       "error": "",
       "details": ""
     },
@@ -346,7 +346,7 @@
       "name": "5.1.1",
       "description": "Services start and stop lifecycle",
       "status": "PASS",
-      "duration_ms": 389.99140000669286,
+      "duration_ms": 140.6278999929782,
       "error": "",
       "details": ""
     },
@@ -355,7 +355,7 @@
       "name": "5.1.2",
       "description": "Services proxy_enabled=False does not launch proxy listener",
       "status": "PASS",
-      "duration_ms": 261.7158000066411,
+      "duration_ms": 132.67150000319816,
       "error": "",
       "details": ""
     },
@@ -364,7 +364,7 @@
       "name": "5.1.3",
       "description": "Services stop is idempotent (multiple calls safe)",
       "status": "PASS",
-      "duration_ms": 348.5985000152141,
+      "duration_ms": 152.01779999188147,
       "error": "",
       "details": ""
     },
@@ -373,7 +373,7 @@
       "name": "5.2.1",
       "description": "Single-instance named mutex detection",
       "status": "PASS",
-      "duration_ms": 4.673999996157363,
+      "duration_ms": 3.8309000083245337,
       "error": "",
       "details": ""
     },
@@ -382,7 +382,7 @@
       "name": "5.3.1",
       "description": "is_admin elevation check function",
       "status": "PASS",
-      "duration_ms": 1.1615999974310398,
+      "duration_ms": 0.9437999979127198,
       "error": "",
       "details": ""
     },
@@ -391,7 +391,7 @@
       "name": "6.1.1",
       "description": "SWRR weight=0 clamped to 1 distributes evenly",
       "status": "PASS",
-      "duration_ms": 0.24130000383593142,
+      "duration_ms": 0.22610000451095402,
       "error": "",
       "details": ""
     },
@@ -400,7 +400,7 @@
       "name": "6.1.2",
       "description": "SWRR 3-link 200:100:50 distribution",
       "status": "PASS",
-      "duration_ms": 0.903899985132739,
+      "duration_ms": 0.9018999990075827,
       "error": "",
       "details": ""
     },
@@ -409,7 +409,7 @@
       "name": "6.1.3",
       "description": "SWRR stale _rr_state key after uplink removal",
       "status": "PASS",
-      "duration_ms": 0.06059999577701092,
+      "duration_ms": 0.06120000034570694,
       "error": "",
       "details": ""
     },
@@ -418,7 +418,7 @@
       "name": "6.2.1",
       "description": "select_for_new_connection dead rule target spills to failover",
       "status": "PASS",
-      "duration_ms": 0.10420000762678683,
+      "duration_ms": 0.10590002057142556,
       "error": "",
       "details": ""
     },
@@ -427,7 +427,7 @@
       "name": "6.2.2",
       "description": "select_for_new_connection all links DOWN returns None",
       "status": "PASS",
-      "duration_ms": 0.01479999627918005,
+      "duration_ms": 0.014899997040629387,
       "error": "",
       "details": ""
     },
@@ -436,7 +436,7 @@
       "name": "6.2.3",
       "description": "preferred_uplink in FORCE mode with forced link DOWN falls back",
       "status": "PASS",
-      "duration_ms": 0.04360001184977591,
+      "duration_ms": 0.04460001946426928,
       "error": "",
       "details": ""
     },
@@ -445,7 +445,7 @@
       "name": "6.3.1",
       "description": "apply_routing deduplication guard skips unchanged mapping",
       "status": "PASS",
-      "duration_ms": 37.095499981660396,
+      "duration_ms": 26.193700003204867,
       "error": "",
       "details": ""
     },
@@ -454,7 +454,7 @@
       "name": "6.3.2",
       "description": "apply_routing with manage_metrics=False is a no-op",
       "status": "PASS",
-      "duration_ms": 0.16680001863278449,
+      "duration_ms": 0.1590000174473971,
       "error": "",
       "details": ""
     },
@@ -463,7 +463,7 @@
       "name": "6.4.1",
       "description": "DownloadProgress.pct with total=0 returns 0 without ZeroDivisionError",
       "status": "PASS",
-      "duration_ms": 0.008500006515532732,
+      "duration_ms": 0.028999987989664078,
       "error": "",
       "details": ""
     },
@@ -472,7 +472,7 @@
       "name": "6.4.2",
       "description": "DownloadProgress.pct partial returns correct percentage",
       "status": "PASS",
-      "duration_ms": 0.003999972250312567,
+      "duration_ms": 0.0036999990697950125,
       "error": "",
       "details": ""
     },
@@ -481,7 +481,7 @@
       "name": "6.4.3",
       "description": "SegmentedDownload with empty uplinks list returns error",
       "status": "PASS",
-      "duration_ms": 0.9408999758306891,
+      "duration_ms": 0.817000021925196,
       "error": "",
       "details": ""
     },
@@ -490,7 +490,7 @@
       "name": "6.5.1",
       "description": "Config unknown future keys are silently ignored",
       "status": "PASS",
-      "duration_ms": 2.4924000026658177,
+      "duration_ms": 1.9659000099636614,
       "error": "",
       "details": ""
     },
@@ -499,7 +499,7 @@
       "name": "6.5.2",
       "description": "Config concurrent save from 10 threads without corruption",
       "status": "PASS",
-      "duration_ms": 11.384399986127391,
+      "duration_ms": 7.666799996513873,
       "error": "",
       "details": ""
     },
@@ -508,7 +508,7 @@
       "name": "6.5.3",
       "description": "Config all modes roundtrip save/load",
       "status": "PASS",
-      "duration_ms": 11.620100005529821,
+      "duration_ms": 5.476699996506795,
       "error": "",
       "details": ""
     },
@@ -517,7 +517,7 @@
       "name": "6.6.1",
       "description": "_host_from_headers handles missing or malformed Host",
       "status": "PASS",
-      "duration_ms": 0.036999990697950125,
+      "duration_ms": 0.017099984688684344,
       "error": "",
       "details": ""
     },
@@ -526,7 +526,7 @@
       "name": "6.6.2",
       "description": "_host_from_headers no-port Host defaults to 80",
       "status": "PASS",
-      "duration_ms": 0.0029999937396496534,
+      "duration_ms": 0.0032999960239976645,
       "error": "",
       "details": ""
     },
@@ -535,7 +535,7 @@
       "name": "6.6.3",
       "description": "ProxyStats bump with empty key is a no-op",
       "status": "PASS",
-      "duration_ms": 0.0047000066842883825,
+      "duration_ms": 0.007199996616691351,
       "error": "",
       "details": ""
     },
@@ -544,7 +544,7 @@
       "name": "6.7.1",
       "description": "ForceBindIP.is_risky detects all anti-cheat titles",
       "status": "PASS",
-      "duration_ms": 0.056200020480901,
+      "duration_ms": 0.06710001616738737,
       "error": "",
       "details": ""
     },
@@ -553,7 +553,7 @@
       "name": "6.7.2",
       "description": "ForceBindIP.is_risky returns False for safe apps",
       "status": "PASS",
-      "duration_ms": 0.01610000617802143,
+      "duration_ms": 0.026399997295811772,
       "error": "",
       "details": ""
     },
@@ -562,7 +562,7 @@
       "name": "6.7.3",
       "description": "ForceBindIP.locate returns None gracefully when not installed",
       "status": "PASS",
-      "duration_ms": 0.5596000119112432,
+      "duration_ms": 0.5973000079393387,
       "error": "",
       "details": ""
     },
@@ -571,7 +571,7 @@
       "name": "6.8.1",
       "description": "TransparentRedirector filter string contains correct port ranges",
       "status": "PASS",
-      "duration_ms": 0.02680000034160912,
+      "duration_ms": 0.021299987565726042,
       "error": "",
       "details": ""
     },
@@ -580,7 +580,7 @@
       "name": "6.8.2",
       "description": "TransparentRedirector table eviction at 4096 entries",
       "status": "PASS",
-      "duration_ms": 0.5575999966822565,
+      "duration_ms": 0.2843000111170113,
       "error": "",
       "details": ""
     },
@@ -589,7 +589,7 @@
       "name": "6.8.3",
       "description": "TransparentRedirector original_destination miss returns None",
       "status": "PASS",
-      "duration_ms": 0.018699996871873736,
+      "duration_ms": 0.006400019628927112,
       "error": "",
       "details": ""
     },
@@ -598,7 +598,7 @@
       "name": "6.9.1",
       "description": "Uplink probe history capped at 20 entries",
       "status": "PASS",
-      "duration_ms": 0.02340000355616212,
+      "duration_ms": 0.0171000137925148,
       "error": "",
       "details": ""
     },
@@ -607,7 +607,7 @@
       "name": "6.9.2",
       "description": "NicRate history deque respects maxlen=120",
       "status": "PASS",
-      "duration_ms": 0.03359999391250312,
+      "duration_ms": 0.027600006433203816,
       "error": "",
       "details": ""
     },
@@ -616,7 +616,7 @@
       "name": "6.9.3",
       "description": "human_bps and human_bytes handle negative input gracefully",
       "status": "PASS",
-      "duration_ms": 0.024200009647756815,
+      "duration_ms": 0.006000016583129764,
       "error": "",
       "details": ""
     },
@@ -625,7 +625,7 @@
       "name": "7.1.1",
       "description": "50 concurrent SOCKS5 handshakes all succeed",
       "status": "PASS",
-      "duration_ms": 592.6255999947898,
+      "duration_ms": 488.5140999977011,
       "error": "",
       "details": ""
     },
@@ -634,7 +634,7 @@
       "name": "7.1.2",
       "description": "200 rapid connect/disconnect cycles leave proxy healthy",
       "status": "PASS",
-      "duration_ms": 1065.1551999908406,
+      "duration_ms": 1812.978200003272,
       "error": "",
       "details": ""
     },
@@ -643,7 +643,7 @@
       "name": "7.1.3",
       "description": "SOCKS5 ATYP=3 domain handshake parsed correctly",
       "status": "PASS",
-      "duration_ms": 561.8220000178553,
+      "duration_ms": 504.5864000276197,
       "error": "",
       "details": ""
     },
@@ -652,7 +652,7 @@
       "name": "7.2.1",
       "description": "HTTP CONNECT tunnel enables bidirectional relay",
       "status": "PASS",
-      "duration_ms": 757.3863999859896,
+      "duration_ms": 641.8033999798354,
       "error": "",
       "details": ""
     },
@@ -661,7 +661,7 @@
       "name": "7.2.2",
       "description": "HTTP proxy absolute URI rewrite returns valid HTTP response",
       "status": "PASS",
-      "duration_ms": 559.0033000044059,
+      "duration_ms": 509.71350001054816,
       "error": "",
       "details": ""
     },
@@ -670,7 +670,7 @@
       "name": "7.3.1",
       "description": "SegmentedDownload cancel() mid-transfer stops workers and returns",
       "status": "PASS",
-      "duration_ms": 722.9783999791835,
+      "duration_ms": 661.7560000158846,
       "error": "",
       "details": ""
     },
@@ -679,7 +679,7 @@
       "name": "7.3.2",
       "description": "SegmentedDownload falls back to single-stream when server ignores Range",
       "status": "PASS",
-      "duration_ms": 713.8733000028878,
+      "duration_ms": 650.2404999919236,
       "error": "",
       "details": ""
     },
@@ -688,7 +688,7 @@
       "name": "7.3.3",
       "description": "SegmentedDownload retries failed chunks (3-attempt retry loop)",
       "status": "PASS",
-      "duration_ms": 732.9522999934852,
+      "duration_ms": 666.8683000025339,
       "error": "",
       "details": ""
     },
@@ -697,7 +697,7 @@
       "name": "7.4.1",
       "description": "PowerShellSession auto-respawns after child process crash",
       "status": "PASS",
-      "duration_ms": 534.613800002262,
+      "duration_ms": 442.8771000239067,
       "error": "",
       "details": ""
     },
@@ -706,7 +706,7 @@
       "name": "7.4.2",
       "description": "PowerShellSession raises PowerShellError on timeout",
       "status": "PASS",
-      "duration_ms": 10032.417100010207,
+      "duration_ms": 10030.864700005623,
       "error": "",
       "details": ""
     },
@@ -715,7 +715,7 @@
       "name": "7.5.1",
       "description": "Services stop->start->stop cycle without port conflicts",
       "status": "PASS",
-      "duration_ms": 1206.2707000004593,
+      "duration_ms": 901.8809999979567,
       "error": "",
       "details": ""
     },
@@ -724,7 +724,7 @@
       "name": "7.5.2",
       "description": "RouterEngine probe_round executes probes in parallel",
       "status": "PASS",
-      "duration_ms": 416.5908999857493,
+      "duration_ms": 265.32969999243505,
       "error": "",
       "details": ""
     },
@@ -733,7 +733,7 @@
       "name": "9.1.1",
       "description": "Sticky hold on active connection (<130ms)",
       "status": "PASS",
-      "duration_ms": 0.09710001177154481,
+      "duration_ms": 0.14479999663308263,
       "error": "",
       "details": ""
     },
@@ -742,7 +742,7 @@
       "name": "9.1.2",
       "description": "Near-boundary ping below threshold (129ms)",
       "status": "PASS",
-      "duration_ms": 0.0523999915458262,
+      "duration_ms": 0.06890000076964498,
       "error": "",
       "details": ""
     },
@@ -751,7 +751,7 @@
       "name": "9.1.3",
       "description": "Threshold breached by 1ms (131ms switches)",
       "status": "PASS",
-      "duration_ms": 0.043199979700148106,
+      "duration_ms": 0.06630001007579267,
       "error": "",
       "details": ""
     },
@@ -760,7 +760,7 @@
       "name": "9.1.4",
       "description": "Exact threshold boundary (130.0ms holds)",
       "status": "PASS",
-      "duration_ms": 0.04199999966658652,
+      "duration_ms": 0.043899985030293465,
       "error": "",
       "details": ""
     },
@@ -769,7 +769,7 @@
       "name": "9.1.5",
       "description": "Gamer prompt case: Active=145ms vs Eth1=90ms (instant switch & lock)",
       "status": "PASS",
-      "duration_ms": 0.023200002033263445,
+      "duration_ms": 0.05780000356025994,
       "error": "",
       "details": ""
     },
@@ -778,7 +778,7 @@
       "name": "9.1.6",
       "description": "All links in degraded state (>130ms picks lowest)",
       "status": "PASS",
-      "duration_ms": 0.01819999306462705,
+      "duration_ms": 0.044599990360438824,
       "error": "",
       "details": ""
     },
@@ -787,7 +787,7 @@
       "name": "9.2.1",
       "description": "Active primary cable pulled (instant failover)",
       "status": "PASS",
-      "duration_ms": 0.03739999374374747,
+      "duration_ms": 0.0577000027988106,
       "error": "",
       "details": ""
     },
@@ -796,7 +796,7 @@
       "name": "9.2.2",
       "description": "Double simultaneous failure (instant rescue to 3rd line)",
       "status": "PASS",
-      "duration_ms": 0.02509998739697039,
+      "duration_ms": 0.04090002039447427,
       "error": "",
       "details": ""
     },
@@ -805,7 +805,7 @@
       "name": "9.2.3",
       "description": "Secondary cable disconnect (zero disturbance to active)",
       "status": "PASS",
-      "duration_ms": 0.022400025045499206,
+      "duration_ms": 0.041399995097890496,
       "error": "",
       "details": ""
     },
@@ -814,7 +814,7 @@
       "name": "9.2.4",
       "description": "Catastrophic failure (all down returns None safely)",
       "status": "PASS",
-      "duration_ms": 0.02300000051036477,
+      "duration_ms": 0.020500010577961802,
       "error": "",
       "details": ""
     },
@@ -823,7 +823,7 @@
       "name": "9.2.5",
       "description": "Silent ISP freeze (probe timeout marks DOWN and switches)",
       "status": "PASS",
-      "duration_ms": 0.029700022423639894,
+      "duration_ms": 0.018099992303177714,
       "error": "",
       "details": ""
     },
@@ -832,7 +832,7 @@
       "name": "9.3.1",
       "description": "Primary recovers with god-tier ping (sticky hold avoids mid-match DC)",
       "status": "PASS",
-      "duration_ms": 0.027400004910305142,
+      "duration_ms": 0.015200028428807855,
       "error": "",
       "details": ""
     },
@@ -841,7 +841,7 @@
       "name": "9.3.2",
       "description": "Primary recovers while active line is lagging (>130ms preemption)",
       "status": "PASS",
-      "duration_ms": 0.04199999966658652,
+      "duration_ms": 0.01619997783564031,
       "error": "",
       "details": ""
     },
@@ -850,7 +850,7 @@
       "name": "9.3.3",
       "description": "Rapid flapping stress test (20 cycles stability)",
       "status": "PASS",
-      "duration_ms": 0.19810002413578331,
+      "duration_ms": 0.148899998748675,
       "error": "",
       "details": ""
     },
@@ -859,7 +859,7 @@
       "name": "9.4.1",
       "description": "Gradual bufferbloat progression (hold until 130ms breached)",
       "status": "PASS",
-      "duration_ms": 0.04010001430287957,
+      "duration_ms": 0.03399999695830047,
       "error": "",
       "details": ""
     },
@@ -868,7 +868,7 @@
       "name": "9.4.2",
       "description": "Transient ping spike recovery (no double-hop oscillation)",
       "status": "PASS",
-      "duration_ms": 0.022299995180219412,
+      "duration_ms": 0.02020000829361379,
       "error": "",
       "details": ""
     },
@@ -877,7 +877,7 @@
       "name": "9.5.1",
       "description": "Regional ISP route asymmetry (Azure India vs SE Asia)",
       "status": "PASS",
-      "duration_ms": 0.02820001100189984,
+      "duration_ms": 0.020899984519928694,
       "error": "",
       "details": ""
     },
@@ -886,7 +886,7 @@
       "name": "9.5.2",
       "description": "Force override with dead-link fallback",
       "status": "PASS",
-      "duration_ms": 0.11490000179037452,
+      "duration_ms": 0.12179999612271786,
       "error": "",
       "details": ""
     },
@@ -895,7 +895,7 @@
       "name": "9.6.1",
       "description": "High frequency sticky evaluation stress (5,000 iterations)",
       "status": "PASS",
-      "duration_ms": 28.526199981570244,
+      "duration_ms": 18.418599996948615,
       "error": "",
       "details": ""
     },
@@ -904,7 +904,7 @@
       "name": "9.6.2",
       "description": "Multi-threaded concurrency stress (4 threads, 1,000 ops)",
       "status": "PASS",
-      "duration_ms": 4.67439999920316,
+      "duration_ms": 3.7443999899551272,
       "error": "",
       "details": ""
     },
@@ -913,7 +913,7 @@
       "name": "9.6.3",
       "description": "RuleEngine deep matching & dynamic CRUD",
       "status": "PASS",
-      "duration_ms": 0.06570000550709665,
+      "duration_ms": 0.04279997665435076,
       "error": "",
       "details": ""
     },
@@ -922,7 +922,7 @@
       "name": "9.6.4",
       "description": "Throughput monitor rate math & accuracy",
       "status": "PASS",
-      "duration_ms": 0.01750001683831215,
+      "duration_ms": 0.01270000939257443,
       "error": "",
       "details": ""
     },
@@ -931,7 +931,142 @@
       "name": "9.6.5",
       "description": "SourcePortPool cyclic range & smooth wrap-around",
       "status": "PASS",
-      "duration_ms": 0.026100024115294218,
+      "duration_ms": 0.03200001083314419,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 10: Robustness, Lifecycle & Crash-Safety Tests",
+      "name": "10.1.1",
+      "description": "reconcile_startup_metrics restores previous crash backup",
+      "status": "PASS",
+      "duration_ms": 2.6166000170633197,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 10: Robustness, Lifecycle & Crash-Safety Tests",
+      "name": "10.1.2",
+      "description": "backup_metrics persists atomic JSON to disk",
+      "status": "PASS",
+      "duration_ms": 2.3551000049337745,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 10: Robustness, Lifecycle & Crash-Safety Tests",
+      "name": "10.2.1",
+      "description": "Host header handles IPv6 bracketed literals",
+      "status": "PASS",
+      "duration_ms": 0.01930000144056976,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 10: Robustness, Lifecycle & Crash-Safety Tests",
+      "name": "10.2.2",
+      "description": "HTTP CONNECT handles bracketed IPv6 literals",
+      "status": "PASS",
+      "duration_ms": 0.0029999937396496534,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 10: Robustness, Lifecycle & Crash-Safety Tests",
+      "name": "10.3.1",
+      "description": "MultiWanProxy DNS resolution caching and TTL",
+      "status": "PASS",
+      "duration_ms": 0.9667999984230846,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 10: Robustness, Lifecycle & Crash-Safety Tests",
+      "name": "10.4.1",
+      "description": "MultiWanProxy stop() cancels tasks and terminates loop cleanly",
+      "status": "PASS",
+      "duration_ms": 51.86509998748079,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 10: Robustness, Lifecycle & Crash-Safety Tests",
+      "name": "10.5.1",
+      "description": "apply_routing preserves base_metric=0 and secondary ranking",
+      "status": "PASS",
+      "duration_ms": 0.2159999858122319,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 10: Robustness, Lifecycle & Crash-Safety Tests",
+      "name": "10.6.1",
+      "description": "Uplink.snapshot() produces an immutable frozen snapshot",
+      "status": "PASS",
+      "duration_ms": 0.04149999585933983,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 11: Hedged Dials, Memory Pruning & Resilience Tests",
+      "name": "11.1.1",
+      "description": "ThroughputMonitor prunes stale adapters after timeout",
+      "status": "PASS",
+      "duration_ms": 0.057199998991563916,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 11: Hedged Dials, Memory Pruning & Resilience Tests",
+      "name": "11.1.2",
+      "description": "ProxyStats.bump bounds dictionary size at limit",
+      "status": "PASS",
+      "duration_ms": 5.037900002207607,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 11: Hedged Dials, Memory Pruning & Resilience Tests",
+      "name": "11.2.1",
+      "description": "AdapterManager.physical() excludes ZeroTier, Tailscale, Hamachi, WireGuard",
+      "status": "PASS",
+      "duration_ms": 0.0892000098247081,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 11: Hedged Dials, Memory Pruning & Resilience Tests",
+      "name": "11.2.2",
+      "description": "AdapterManager.refresh() updates list when valid empty result returned",
+      "status": "PASS",
+      "duration_ms": 0.019800005247816443,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 11: Hedged Dials, Memory Pruning & Resilience Tests",
+      "name": "11.3.1",
+      "description": "Hedged dial succeeds when primary hangs, failing over within hedge window (< 1.5s)",
+      "status": "PASS",
+      "duration_ms": 300.58830001507886,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 11: Hedged Dials, Memory Pruning & Resilience Tests",
+      "name": "11.3.2",
+      "description": "Hedged dial fast failure failover (< 0.15s)",
+      "status": "PASS",
+      "duration_ms": 3.233299998100847,
+      "error": "",
+      "details": ""
+    },
+    {
+      "phase": "Phase 11: Hedged Dials, Memory Pruning & Resilience Tests",
+      "name": "11.4.1",
+      "description": "Uplink history deque handles O(1) eviction and accurate loss calculation",
+      "status": "PASS",
+      "duration_ms": 0.015199999324977398,
       "error": "",
       "details": ""
     }

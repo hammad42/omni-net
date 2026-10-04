@@ -53,8 +53,15 @@ def acquire_single_instance() -> bool:
     if not IS_WINDOWS:
         return True
     ERROR_ALREADY_EXISTS = 183
+    ERROR_ACCESS_DENIED = 5
     _mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, False, MUTEX_NAME)
-    return ctypes.windll.kernel32.GetLastError() != ERROR_ALREADY_EXISTS
+    err = ctypes.windll.kernel32.GetLastError()
+    if not _mutex_handle or err in (ERROR_ALREADY_EXISTS, ERROR_ACCESS_DENIED):
+        if _mutex_handle:
+            ctypes.windll.kernel32.CloseHandle(_mutex_handle)
+            _mutex_handle = None
+        return False
+    return True
 
 
 def run_cli(args) -> int:

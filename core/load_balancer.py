@@ -42,13 +42,15 @@ from typing import Optional, Tuple
 
 from .app_binder import RuleEngine, TransparentRedirector
 from .netutil import bind_socket_to_uplink
-from .router_engine import RouterEngine, Uplink
+from .router_engine import RouterEngine, Uplink, UplinkSnapshot
 from config import Config
 
 log = logging.getLogger("omninet.lb")
 
 BUF = 65536
 CONNECT_TIMEOUT = 8.0
+STALL_TIMEOUT = 120.0
+HEDGE_DELAY = 0.3
 
 
 @dataclass
@@ -63,6 +65,10 @@ class ProxyStats:
     def bump(self, bucket: dict, key: str, field_: str, n: int = 1) -> None:
         if not key:
             return
+        if len(bucket) > 2048:
+            dead_keys = [k for k, v in bucket.items() if v.get("conns", 0) == 0]
+            for k in dead_keys[:512]:
+                bucket.pop(k, None)
         d = bucket.setdefault(key, {"conns": 0, "up": 0, "down": 0})
         d[field_] += n
 
@@ -93,6 +99,7 @@ class MultiWanProxy:
         self.redirector = redirector
         self.stats = ProxyStats()
         self.ports = SourcePortPool(cfg.upstream_port_low, cfg.upstream_port_high)
+        self._dns_cache: Dict[str, Tuple[str, float]] = {}
 
         self._loop: Optional[asyncio.AbstractEventLoop] = None
         self._thread: Optional[threading.Thread] = None
@@ -102,15 +109,16 @@ class MultiWanProxy:
     # ------------------------------------------------------------------ #
     # Lifecycle
     # ------------------------------------------------------------------ #
-    def start(self) -> None:
+    def start(self) -> bool:
         if self.running:
-            return
+            return True
         self._thread = threading.Thread(target=self._run, name="omninet-proxy", daemon=True)
         self._thread.start()
         for _ in range(50):
             if self.running:
                 break
             time.sleep(0.05)
+        return self.running
 
     def _run(self) -> None:
         self._loop = asyncio.new_event_loop()
@@ -121,14 +129,28 @@ class MultiWanProxy:
         except Exception as e:
             log.exception("proxy loop died: %s", e)
         finally:
-            self.running = False
+            try:
+                pending = [t for t in asyncio.all_tasks(self._loop) if not t.done()]
+                if pending:
+                    for t in pending:
+                        t.cancel()
+                    self._loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                self._loop.run_until_complete(self._loop.shutdown_asyncgens())
+            except Exception:
+                pass
+            finally:
+                self.running = False
+                try:
+                    self._loop.close()
+                except Exception:
+                    pass
 
     async def _serve(self) -> None:
         host = self.cfg.proxy_host
         specs = [(self.cfg.socks_port, self._handle_auto),
                  (self.cfg.http_port, self._handle_auto)]
         if self.cfg.transparent_mode:
-            specs.append((self.cfg.socks_port + 1, self._handle_transparent))
+            specs.append((self.cfg.transparent_port, self._handle_transparent))
 
         for port, handler in specs:
             try:
@@ -146,63 +168,144 @@ class MultiWanProxy:
                     srv.close()
                 except Exception:
                     pass
-            self._loop.call_soon_threadsafe(self._loop.stop)
+
+            def _cancel_and_stop():
+                try:
+                    for task in asyncio.all_tasks(self._loop):
+                        if not task.done():
+                            task.cancel()
+                except Exception:
+                    pass
+                self._loop.stop()
+
+            self._loop.call_soon_threadsafe(_cancel_and_stop)
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
         self.running = False
 
     # ------------------------------------------------------------------ #
     # Upstream dialling
     # ------------------------------------------------------------------ #
-    async def _open_upstream(self, uplink: Uplink, host: str, port: int):
-        loop = asyncio.get_running_loop()
+    async def _resolve_host(self, host: str, port: int) -> str:
         try:
             ipaddress.ip_address(host)
-            addr = host
+            return host
         except ValueError:
-            infos = await loop.getaddrinfo(host, port, family=socket.AF_INET,
-                                           type=socket.SOCK_STREAM)
-            if not infos:
-                raise OSError(f"DNS failed for {host}")
-            addr = infos[0][4][0]
+            pass
+
+        now = time.time()
+        cached = self._dns_cache.get(host)
+        if cached and cached[1] > now:
+            return cached[0]
+
+        loop = asyncio.get_running_loop()
+        infos = await loop.getaddrinfo(host, port, family=socket.AF_INET,
+                                       type=socket.SOCK_STREAM)
+        if not infos:
+            raise OSError(f"DNS failed for {host}")
+        addr = infos[0][4][0]
+        if len(self._dns_cache) > 1024:
+            self._dns_cache.clear()
+        self._dns_cache[host] = (addr, now + 300.0)
+        return addr
+
+    async def _open_upstream(self, uplink: Uplink | UplinkSnapshot, host: str, port: int):
+        loop = asyncio.get_running_loop()
+        addr = await self._resolve_host(host, port)
+
+        u_ip = uplink.ip
+        u_if_index = uplink.if_index
+        if not u_ip or not u_if_index:
+            raise OSError(f"Uplink {uplink.display} has no routable IP or interface index")
 
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.setblocking(False)
         s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         try:
             src_port = self.ports.next() if self.cfg.transparent_mode else 0
-            bind_socket_to_uplink(s, uplink.ip, uplink.if_index, src_port=src_port)
+            bind_socket_to_uplink(s, u_ip, u_if_index, src_port=src_port,
+                                  allow_ephemeral_fallback=not self.cfg.transparent_mode)
             await asyncio.wait_for(loop.sock_connect(s, (addr, port)), CONNECT_TIMEOUT)
-        except Exception:
+        except BaseException:
             s.close()
             raise
         return await asyncio.open_connection(sock=s)
 
     async def _dial(self, host: str, port: int, target_name: str, exe: str):
         """Pick an uplink, connect, and fail over to the next healthy link on
-        error. Returns (reader, writer, uplink)."""
-        tried: set[str] = set()
-        first = self.router.select_for_new_connection(target_name)
-        order = []
-        if first:
-            order.append(first)
-        for u in self.router.healthy_uplinks():
-            if not first or u.name != first.name:
-                order.append(u)
+        error. Uses hedged dials (Happy Eyeballs across uplinks) so slow/dead links
+        hedge to the next candidate after HEDGE_DELAY (300ms).
+        Returns (reader, writer, uplink)."""
+        with self.router._lock:
+            first = self.router.select_for_new_connection(target_name)
+            first_snap = first.snapshot() if first else None
+            healthy_snaps = [u.snapshot() for u in self.router.healthy_uplinks()]
 
+        order: list[UplinkSnapshot] = []
+        seen: set[str] = set()
+        if first_snap and first_snap.healthy and first_snap.ip:
+            order.append(first_snap)
+            seen.add(first_snap.name)
+        for snap in healthy_snaps:
+            if snap.name not in seen and snap.ip and snap.if_index:
+                order.append(snap)
+                seen.add(snap.name)
+
+        if not order:
+            self.stats.failed_conns += 1
+            raise OSError("no healthy uplink")
+
+        pending_tasks: dict[asyncio.Task, tuple[int, UplinkSnapshot]] = {}
+        candidate_idx = 0
         last_err: Optional[Exception] = None
-        for i, uplink in enumerate(order):
-            if uplink.name in tried:
-                continue
-            tried.add(uplink.name)
-            try:
-                r, w = await self._open_upstream(uplink, host, port)
-                if i > 0:
-                    self.stats.failovers += 1
-                    log.info("failover: %s:%s via %s (after %s)",
-                             host, port, uplink.display, order[0].display)
-                return r, w, uplink
-            except Exception as e:
-                last_err = e
-                log.debug("dial %s:%s via %s failed: %s", host, port, uplink.display, e)
+
+        async def _dial_one(snap: UplinkSnapshot):
+            return await self._open_upstream(snap, host, port)
+
+        t0 = asyncio.create_task(_dial_one(order[0]))
+        pending_tasks[t0] = (0, order[0])
+        candidate_idx = 1
+
+        while pending_tasks:
+            timeout = HEDGE_DELAY if candidate_idx < len(order) else CONNECT_TIMEOUT
+            done, _ = await asyncio.wait(
+                list(pending_tasks.keys()),
+                timeout=timeout,
+                return_when=asyncio.FIRST_COMPLETED
+            )
+
+            if done:
+                for t in done:
+                    idx, snap = pending_tasks.pop(t)
+                    try:
+                        r, w = t.result()
+                        # Winner found! Cancel and close any losing tasks
+                        for other_task, _ in list(pending_tasks.items()):
+                            other_task.cancel()
+                            try:
+                                if other_task.done() and not other_task.cancelled():
+                                    res = other_task.result()
+                                    if res:
+                                        _close(res[1])
+                            except Exception:
+                                pass
+                        if idx > 0:
+                            self.stats.failovers += 1
+                            log.info("failover: %s:%s via %s (after %s)",
+                                     host, port, snap.display, order[0].display)
+                        live_u = self.router.uplinks.get(snap.name)
+                        return r, w, live_u if live_u is not None else snap
+                    except Exception as e:
+                        last_err = e
+                        log.debug("dial %s:%s via %s failed: %s", host, port, snap.display, e)
+
+            # If hedged timeout expired (or candidate failed) and more candidates remain:
+            if candidate_idx < len(order):
+                next_snap = order[candidate_idx]
+                t_next = asyncio.create_task(_dial_one(next_snap))
+                pending_tasks[t_next] = (candidate_idx, next_snap)
+                candidate_idx += 1
+
         self.stats.failed_conns += 1
         raise last_err or OSError("no healthy uplink")
 
@@ -232,9 +335,11 @@ class MultiWanProxy:
         finally:
             _close(writer)
 
-    def _client_context(self, writer: asyncio.StreamWriter) -> Tuple[str, str]:
+    async def _client_context(self, writer: asyncio.StreamWriter) -> Tuple[str, str]:
         peer = writer.get_extra_info("peername") or ("", 0)
-        return self.rules.target_for_client_port(int(peer[1]) if len(peer) > 1 else 0)
+        cport = int(peer[1]) if len(peer) > 1 else 0
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self.rules.target_for_client_port, cport)
 
     # -- SOCKS5 ---------------------------------------------------------- #
     async def _socks5(self, head: bytes, reader, writer) -> None:
@@ -254,7 +359,11 @@ class MultiWanProxy:
             host = socket.inet_ntoa(await reader.readexactly(4))
         elif atyp == 3:
             n = (await reader.readexactly(1))[0]
-            host = (await reader.readexactly(n)).decode("idna", "ignore")
+            raw_host = await reader.readexactly(n)
+            try:
+                host = raw_host.decode("idna")
+            except Exception:
+                host = raw_host.decode("utf-8", "ignore")
         elif atyp == 4:
             host = socket.inet_ntop(socket.AF_INET6, await reader.readexactly(16))
         else:
@@ -263,7 +372,7 @@ class MultiWanProxy:
             return
         port = struct.unpack("!H", await reader.readexactly(2))[0]
 
-        target, exe = self._client_context(writer)
+        target, exe = await self._client_context(writer)
         try:
             ur, uw, uplink = await self._dial(host, port, target, exe)
         except Exception:
@@ -286,8 +395,13 @@ class MultiWanProxy:
         method_s = method.decode("ascii", "ignore").upper()
 
         if method_s == "CONNECT":
-            host, _, port_s = target_uri.decode().rpartition(":")
-            port = int(port_s or 443)
+            uri_str = target_uri.decode("ascii", "ignore")
+            if uri_str.startswith("["):
+                host, _, rest_p = uri_str[1:].partition("]:")
+                port = int(rest_p) if rest_p.isdigit() else 443
+            else:
+                host, _, port_s = uri_str.rpartition(":")
+                port = int(port_s) if port_s.isdigit() else 443
             rest = b""
         else:
             uri = target_uri.decode("ascii", "ignore")
@@ -305,7 +419,7 @@ class MultiWanProxy:
                     return
                 rest = raw
 
-        target, exe = self._client_context(writer)
+        target, exe = await self._client_context(writer)
         try:
             ur, uw, uplink = await self._dial(host, port, target, exe)
         except Exception:
@@ -331,7 +445,7 @@ class MultiWanProxy:
             _close(writer)
             return
         host, port = orig
-        target, exe = self.rules.target_for_client_port(cport)
+        target, exe = await self._client_context(writer)
         try:
             ur, uw, uplink = await self._dial(host, port, target, exe)
         except Exception:
@@ -342,28 +456,37 @@ class MultiWanProxy:
     # ------------------------------------------------------------------ #
     # Relay
     # ------------------------------------------------------------------ #
-    async def _relay(self, cr, cw, ur, uw, uplink: Uplink, exe: str, label: str) -> None:
+    async def _relay(self, cr, cw, ur, uw, uplink: Uplink | UplinkSnapshot, exe: str, label: str) -> None:
         self.stats.total_conns += 1
         self.stats.active_conns += 1
-        uplink.active_conns += 1
+        if isinstance(uplink, Uplink):
+            uplink.active_conns += 1
         self.stats.bump(self.stats.by_uplink, uplink.name, "conns")
         self.stats.bump(self.stats.by_app, exe or "unknown", "conns")
 
         async def pump(src, dst, direction: str) -> None:
             try:
                 while True:
-                    data = await src.read(BUF)
+                    try:
+                        data = await asyncio.wait_for(src.read(BUF), timeout=STALL_TIMEOUT)
+                    except asyncio.TimeoutError:
+                        break
                     if not data:
                         break
                     dst.write(data)
-                    await dst.drain()
+                    try:
+                        await asyncio.wait_for(dst.drain(), timeout=STALL_TIMEOUT)
+                    except asyncio.TimeoutError:
+                        break
                     n = len(data)
                     if direction == "up":
-                        uplink.bytes_up += n
+                        if isinstance(uplink, Uplink):
+                            uplink.bytes_up += n
                         self.stats.bump(self.stats.by_uplink, uplink.name, "up", n)
                         self.stats.bump(self.stats.by_app, exe or "unknown", "up", n)
                     else:
-                        uplink.bytes_down += n
+                        if isinstance(uplink, Uplink):
+                            uplink.bytes_down += n
                         self.stats.bump(self.stats.by_uplink, uplink.name, "down", n)
                         self.stats.bump(self.stats.by_app, exe or "unknown", "down", n)
             except Exception:
@@ -374,13 +497,23 @@ class MultiWanProxy:
                 except Exception:
                     pass
 
+        task_up = asyncio.create_task(pump(cr, uw, "up"))
+        task_down = asyncio.create_task(pump(ur, cw, "down"))
         try:
-            await asyncio.gather(pump(cr, uw, "up"), pump(ur, cw, "down"))
+            done, pending = await asyncio.wait([task_up, task_down], return_when=asyncio.FIRST_COMPLETED)
+            if pending:
+                _, still_pending = await asyncio.wait(pending, timeout=5.0)
+                for t in still_pending:
+                    t.cancel()
+                await asyncio.gather(*still_pending, return_exceptions=True)
         finally:
+            for t in (task_up, task_down):
+                if not t.done():
+                    t.cancel()
             self.stats.active_conns -= 1
-            uplink.active_conns = max(0, uplink.active_conns - 1)
-            _close(cw)
-            _close(uw)
+            if isinstance(uplink, Uplink):
+                uplink.active_conns = max(0, uplink.active_conns - 1)
+            await asyncio.gather(_close_async(cw), _close_async(uw), return_exceptions=True)
 
 
 def _close(w) -> None:
@@ -390,10 +523,23 @@ def _close(w) -> None:
         pass
 
 
+async def _close_async(w) -> None:
+    try:
+        w.close()
+        await w.wait_closed()
+    except Exception:
+        pass
+
+
 def _host_from_headers(lines) -> Tuple[str, int]:
     for ln in lines[1:]:
         if ln.lower().startswith(b"host:"):
             v = ln.split(b":", 1)[1].strip().decode("ascii", "ignore")
+            if v.startswith("["):
+                h, _, rest = v[1:].partition("]")
+                if rest.startswith(":") and rest[1:].isdigit():
+                    return h, int(rest[1:])
+                return h, 80
             h, _, p = v.rpartition(":")
             if h and p.isdigit():
                 return h, int(p)

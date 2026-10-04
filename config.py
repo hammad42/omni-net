@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import os
 import threading
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -26,6 +26,7 @@ def config_dir() -> Path:
 
 CONFIG_PATH = config_dir() / "config.json"
 LOG_PATH = config_dir() / "omninet.log"
+METRICS_BACKUP_PATH = config_dir() / "metrics_backup.json"
 
 
 # --------------------------------------------------------------------------- #
@@ -70,8 +71,8 @@ class Config:
 
     # Ports our own upstream sockets bind to. WinDivert excludes this range so
     # we never capture our own traffic and loop forever.
-    upstream_port_low: int = 50000
-    upstream_port_high: int = 50999
+    upstream_port_low: int = 30000
+    upstream_port_high: int = 30999
 
     probe_targets: List[str] = field(default_factory=lambda: ["1.1.1.1:443", "8.8.8.8:443", "20.219.1.1:443", "20.43.132.128:443"])
     probe_interval_s: float = 3.0
@@ -90,6 +91,10 @@ class Config:
     uplinks: Dict[str, UplinkConfig] = field(default_factory=dict)
     rules: List[AppRule] = field(default_factory=list)
 
+    @property
+    def transparent_port(self) -> int:
+        return self.socks_port + 1
+
     # ------------------------------------------------------------------ #
     def uplink(self, name: str) -> UplinkConfig:
         if name not in self.uplinks:
@@ -107,6 +112,13 @@ class Config:
 _lock = threading.Lock()
 
 
+def _filter_dataclass_fields(cls, d: Any) -> Dict[str, Any]:
+    if not isinstance(d, dict):
+        return {}
+    valid = {f.name for f in fields(cls)}
+    return {k: v for k, v in d.items() if k in valid}
+
+
 def load() -> Config:
     if not CONFIG_PATH.exists():
         return Config()
@@ -116,13 +128,37 @@ def load() -> Config:
         return Config()
 
     cfg = Config()
+    if not isinstance(raw, dict):
+        return cfg
+
     for k, v in raw.items():
-        if k == "uplinks":
-            cfg.uplinks = {name: UplinkConfig(**d) for name, d in (v or {}).items()}
-        elif k == "rules":
-            cfg.rules = [AppRule(**d) for d in (v or [])]
-        elif hasattr(cfg, k):
-            setattr(cfg, k, v)
+        try:
+            if k == "uplinks" and isinstance(v, dict):
+                cfg.uplinks = {
+                    name: UplinkConfig(**_filter_dataclass_fields(UplinkConfig, d))
+                    for name, d in v.items() if isinstance(d, dict) and "name" in d
+                }
+            elif k == "rules" and isinstance(v, list):
+                cfg.rules = [
+                    AppRule(**_filter_dataclass_fields(AppRule, d))
+                    for d in v if isinstance(d, dict) and "exe" in d
+                ]
+            elif hasattr(cfg, k):
+                curr = getattr(cfg, k)
+                if isinstance(curr, float) and isinstance(v, (int, str)):
+                    try:
+                        v = float(v)
+                    except ValueError:
+                        continue
+                elif isinstance(curr, int) and isinstance(v, str):
+                    try:
+                        v = int(v)
+                    except ValueError:
+                        continue
+                setattr(cfg, k, v)
+        except Exception:
+            continue
+
     if cfg.mode not in ALL_MODES:
         cfg.mode = MODE_AUTO
     return cfg

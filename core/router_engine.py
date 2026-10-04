@@ -20,6 +20,7 @@ Failover honesty:
 
 from __future__ import annotations
 
+import collections
 import logging
 import socket
 import threading
@@ -38,6 +39,21 @@ STATE_DOWN = "down"
 STATE_UNKNOWN = "unknown"
 
 
+@dataclass(frozen=True)
+class UplinkSnapshot:
+    name: str
+    ip: str
+    if_index: int
+    display: str
+    healthy: bool
+    weight: int = 100
+    state: str = STATE_UNKNOWN
+    rtt_ms: float = 0.0
+    loss_pct: float = 0.0
+    is_wifi: bool = False
+    active_conns: int = 0
+
+
 @dataclass
 class Uplink:
     adapter: Adapter
@@ -51,7 +67,8 @@ class Uplink:
     consecutive_ok: int = 0
     consecutive_fail: int = 0
     last_probe_ts: float = 0.0
-    history: List[bool] = field(default_factory=list)
+    history: collections.deque = field(default_factory=lambda: collections.deque(maxlen=20))
+    last_probe_gen: int = 0
 
     # live counters (maintained by the load balancer)
     active_conns: int = 0
@@ -77,6 +94,21 @@ class Uplink:
     @property
     def display(self) -> str:
         return self.friendly or self.adapter.name
+
+    def snapshot(self) -> UplinkSnapshot:
+        return UplinkSnapshot(
+            name=self.name,
+            ip=self.ip,
+            if_index=self.if_index,
+            display=self.display,
+            healthy=self.healthy,
+            weight=self.weight,
+            state=self.state,
+            rtt_ms=self.rtt_ms,
+            loss_pct=self.loss_pct,
+            is_wifi=self.adapter.is_wifi,
+            active_conns=self.active_conns,
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -113,6 +145,9 @@ class RouterEngine:
         self._rr_state: Dict[str, int] = {}
         self._last_applied: Dict[str, int] = {}
         self._current_preferred: Optional[str] = None  # sticky routing: name of current preferred link
+        self._preferred_reason: str = ""
+        self._preferred_code: str = ""
+        self._probe_gen: int = 0
 
         self.on_change: Optional[Callable[[], None]] = None
         self.on_event: Optional[Callable[[str, str], None]] = None   # (level, message)
@@ -131,6 +166,8 @@ class RouterEngine:
     # ------------------------------------------------------------------ #
     def sync_uplinks(self) -> None:
         self.adapters.refresh()
+        events: List[Tuple[str, str]] = []
+        changed = False
         with self._lock:
             live = {}
             for a in self.adapters.physical():
@@ -153,12 +190,15 @@ class RouterEngine:
                     live[a.name] = up_init
             gone = set(self.uplinks) - set(live)
             for name in gone:
-                self.log_event("warning", f"Adapter removed: {name}")
+                events.append(("warning", f"Adapter removed: {name}"))
             added = set(live) - set(self.uplinks)
             for name in added:
-                self.log_event("info", f"Adapter detected: {name}")
+                events.append(("info", f"Adapter detected: {name}"))
             changed = bool(gone or added)
             self.uplinks = live
+
+        for lvl, msg in events:
+            self.log_event(lvl, msg)
         if changed and self.on_change:
             try:
                 self.on_change()
@@ -179,12 +219,23 @@ class RouterEngine:
     # ------------------------------------------------------------------ #
     # Probing
     # ------------------------------------------------------------------ #
-    def _probe_uplink(self, u: Uplink) -> None:
+    def _probe_uplink(self, u: Uplink, gen: int) -> None:
         results: List[Optional[float]] = []
+        deadline = time.time() + self.cfg.probe_timeout_s * 2.0
+
+        with self._lock:
+            probe_ip = u.ip
+            probe_if_index = u.if_index
+            if not probe_ip or not probe_if_index or not u.enabled:
+                return
+
         for target in self.cfg.probe_targets:
+            rem = deadline - time.time()
+            if rem <= 0.1:
+                break
+            timeout = min(self.cfg.probe_timeout_s, max(0.2, rem))
             host, _, port = target.partition(":")
-            rtt = tcp_probe(host.strip(), int(port or 443), u.ip, u.if_index,
-                            self.cfg.probe_timeout_s)
+            rtt = tcp_probe(host.strip(), int(port or 443), probe_ip, probe_if_index, timeout)
             results.append(rtt)
             if rtt is not None:
                 break          # one success is enough; don't burn the timeout
@@ -192,11 +243,13 @@ class RouterEngine:
         ok = any(r is not None for r in results)
         good = [r for r in results if r is not None]
 
+        event_to_log: Optional[Tuple[str, str]] = None
         with self._lock:
+            if gen < u.last_probe_gen or gen != self._probe_gen:
+                return
+            u.last_probe_gen = gen
             u.last_probe_ts = time.time()
             u.history.append(ok)
-            if len(u.history) > 20:
-                u.history.pop(0)
             u.loss_pct = 100.0 * (1 - (sum(u.history) / len(u.history)))
             if ok:
                 u.rtt_ms = round(min(good), 1)
@@ -204,20 +257,25 @@ class RouterEngine:
                 u.consecutive_fail = 0
                 if u.state != STATE_UP and u.consecutive_ok >= self.cfg.recover_threshold:
                     u.state = STATE_UP
-                    self.log_event("info", f"{u.display}: link UP ({u.rtt_ms} ms)")
-                elif u.state == STATE_UNKNOWN:
-                    u.state = STATE_UP
+                    event_to_log = ("info", f"{u.display}: link UP ({u.rtt_ms} ms)")
             else:
                 u.consecutive_fail += 1
                 u.consecutive_ok = 0
                 if u.state != STATE_DOWN and u.consecutive_fail >= self.cfg.fail_threshold:
                     u.state = STATE_DOWN
                     u.rtt_ms = 0.0
-                    self.log_event("warning", f"{u.display}: link DOWN")
+                    event_to_log = ("warning", f"{u.display}: link DOWN")
+
+        if event_to_log:
+            self.log_event(*event_to_log)
 
     def probe_round(self) -> None:
-        ups = self.candidates()
-        threads = [threading.Thread(target=self._probe_uplink, args=(u,), daemon=True)
+        with self._lock:
+            self._probe_gen += 1
+            gen = self._probe_gen
+            ups = self.candidates()
+
+        threads = [threading.Thread(target=self._probe_uplink, args=(u, gen), daemon=True)
                    for u in ups]
         for t in threads:
             t.start()
@@ -237,50 +295,136 @@ class RouterEngine:
         different wired/weight tier (e.g. weight increase, or wired vs wifi)
         always happen immediately.
         """
-        healthy = self.healthy_uplinks()
-        if not healthy:
-            self._current_preferred = None
-            return None
+        events: List[Tuple[str, str]] = []
+        with self._lock:
+            healthy = [u for u in self.uplinks.values()
+                       if u.healthy and u.adapter.is_routable]
+            if not healthy:
+                self._current_preferred = None
+                self._preferred_code = "none"
+                self._preferred_reason = "No healthy connections available."
+                return None
 
-        if self.cfg.mode == MODE_FORCE and self.cfg.forced_adapter:
-            forced = self.uplinks.get(self.cfg.forced_adapter)
-            if forced and forced.healthy:
-                self._current_preferred = forced.name
-                return forced
-            # forced link is dead -> fall through to auto rather than go offline
-            self.log_event("warning",
-                           f"Forced adapter {self.cfg.forced_adapter} unavailable; using failover")
+            if self.cfg.mode == MODE_FORCE and self.cfg.forced_adapter:
+                forced = self.uplinks.get(self.cfg.forced_adapter)
+                if forced and forced.healthy:
+                    self._current_preferred = forced.name
+                    self._preferred_code = "forced_adapter"
+                    self._preferred_reason = f"Manual Override: Locked to {forced.display} in Settings."
+                    return forced
+                # forced link is dead -> fall through to auto rather than go offline
+                events.append(("warning",
+                               f"Forced adapter {self.cfg.forced_adapter} unavailable; using failover"))
 
-        def _tier(u: Uplink):
-            """Wired/weight tier — everything except RTT."""
-            wired = 0 if not u.adapter.is_wifi else 1
-            return (wired, -u.weight)
+            def _tier(u: Uplink):
+                """Wired/weight tier — everything except RTT."""
+                wired = 0 if not u.adapter.is_wifi else 1
+                return (wired, -u.weight)
 
-        def rank(u: Uplink):
-            return (*_tier(u), u.rtt_ms or 9999)
+            def rank(u: Uplink):
+                return (*_tier(u), u.rtt_ms or 9999)
 
-        best = sorted(healthy, key=rank)[0]
+            sorted_healthy = sorted(healthy, key=rank)
+            best = sorted_healthy[0]
 
-        # Sticky check: if the current preferred link is still healthy, in the
-        # same tier as the new best, and its RTT is below the threshold, keep
-        # it to avoid unnecessary switching due to minor RTT fluctuation.
-        if self._current_preferred and self._current_preferred != best.name:
-            current = self.uplinks.get(self._current_preferred)
-            if (current and current.healthy and current.rtt_ms > 0
-                    and current.rtt_ms <= self.cfg.rtt_switch_threshold_ms
-                    and _tier(current) == _tier(best)):
-                return current  # same tier, RTT still OK — stay put
+            # Sticky check: if the current preferred link is still healthy, in the
+            # same tier as the new best, and its RTT is below the threshold, keep
+            # it to avoid unnecessary switching due to minor RTT fluctuation.
+            if self._current_preferred and self._current_preferred != best.name:
+                current = self.uplinks.get(self._current_preferred)
+                if (current and current.healthy and current.rtt_ms > 0
+                        and current.rtt_ms <= self.cfg.rtt_switch_threshold_ms
+                        and _tier(current) == _tier(best)):
+                    self._preferred_code = "sticky_lock"
+                    self._preferred_reason = (
+                        f"Stability Lock: Current ping ({current.rtt_ms:.0f} ms) is within safe "
+                        f"threshold (<= {self.cfg.rtt_switch_threshold_ms:.0f} ms), avoiding unnecessary switching."
+                    )
+                    return current  # same tier, RTT still OK — stay put
 
-        if best.name != self._current_preferred:
-            old = self._current_preferred
-            self._current_preferred = best.name
-            if old:
-                old_u = self.uplinks.get(old)
-                self.log_event("info",
-                               f"Switching {old} ({old_u.rtt_ms if old_u else '?'}ms) "
-                               f"→ {best.display} ({best.rtt_ms}ms) "
-                               f"[threshold {self.cfg.rtt_switch_threshold_ms}ms]")
-        return best
+            # Determine why 'best' was selected
+            if len(sorted_healthy) == 1:
+                if len(self.uplinks) > 1:
+                    self._preferred_code = "sole_survivor"
+                    self._preferred_reason = "Sole Active Link: All other connections are offline or failing health probes."
+                else:
+                    self._preferred_code = "only_link"
+                    self._preferred_reason = "Sole connection detected on this system."
+            else:
+                runner_up = sorted_healthy[1]
+                if _tier(best)[0] < _tier(runner_up)[0]:
+                    self._preferred_code = "wired_priority"
+                    self._preferred_reason = f"Wired Priority: Ethernet ({best.display}) prioritized over wireless Wi-Fi."
+                elif best.weight > runner_up.weight:
+                    self._preferred_code = "weight_priority"
+                    self._preferred_reason = f"Weight Priority: Configured with higher priority weight ({best.weight} vs {runner_up.weight})."
+                else:
+                    self._preferred_code = "lowest_latency"
+                    if runner_up.rtt_ms:
+                        self._preferred_reason = f"Lowest Latency: Fastest response time ({best.rtt_ms:.0f} ms vs {runner_up.rtt_ms:.0f} ms on {runner_up.display})."
+                    else:
+                        self._preferred_reason = f"Lowest Latency: Lowest response time ({best.rtt_ms:.0f} ms)."
+
+            if best.name != self._current_preferred:
+                old = self._current_preferred
+                self._current_preferred = best.name
+                if old:
+                    old_u = self.uplinks.get(old)
+                    events.append(("info",
+                                   f"Switching {old} ({old_u.rtt_ms if old_u else '?'}ms) "
+                                   f"→ {best.display} ({best.rtt_ms}ms) "
+                                   f"[threshold {self.cfg.rtt_switch_threshold_ms}ms]"))
+            result = best
+
+        for lvl, msg in events:
+            self.log_event(lvl, msg)
+        return result
+
+    def explain_uplink_status(self, name: str) -> Tuple[str, str]:
+        """Return (badge_text, detailed_explanation) for the specified uplink."""
+        with self._lock:
+            u = self.uplinks.get(name)
+            if not u:
+                return ("UNKNOWN", "Uplink not recognized by engine.")
+
+            pref = self.preferred_uplink()
+            if pref and pref.name == name:
+                reason = getattr(self, "_preferred_reason", "") or "Selected as primary default route."
+                return ("PREFERRED", reason)
+
+            if u.state == STATE_DOWN:
+                if u.loss_pct >= 50:
+                    return ("DOWN", f"Degraded: High packet loss ({u.loss_pct:.0f}%). Traffic diverted to healthy links.")
+                elif not u.ip:
+                    return ("DOWN", "Offline: No valid IP address assigned (cable unplugged or DHCP failing).")
+                else:
+                    return ("DOWN", f"Offline: Failed {u.consecutive_fail} consecutive health probes.")
+
+            if u.state == STATE_UNKNOWN:
+                if u.consecutive_ok > 0:
+                    return ("TESTING", f"Recovering: Passed {u.consecutive_ok} of {self.cfg.recover_threshold} health probes. Verifying stability.")
+                return ("TESTING", "Initializing: Awaiting first health probe response.")
+
+            if not u.enabled:
+                return ("DISABLED", "Disabled in OmniNet configuration.")
+
+            if self.cfg.mode == MODE_FORCE and self.cfg.forced_adapter and self.cfg.forced_adapter != name:
+                return ("STANDBY", f"Standby: Manual Override active for {self.cfg.forced_adapter}.")
+
+            if self.cfg.mode == MODE_AGGREGATE:
+                return ("AGGREGATE", f"Active Pool: Sharing multi-WAN bandwidth, app rules, and downloads ({u.rtt_ms:.0f} ms).")
+
+            if u.adapter.is_wifi and (pref and not pref.adapter.is_wifi):
+                return ("STANDBY", f"Wireless Standby: Wi-Fi held in reserve while wired Ethernet ({pref.display}) is primary.")
+
+            if pref:
+                if u.weight < pref.weight:
+                    return ("STANDBY", f"Standby: Lower configured priority weight ({u.weight} vs {pref.weight}).")
+                if u.rtt_ms and pref.rtt_ms and u.rtt_ms > pref.rtt_ms:
+                    diff = u.rtt_ms - pref.rtt_ms
+                    return ("STANDBY", f"Standby: Backup link (+{diff:.0f} ms slower than primary). Ready for sub-500ms failover.")
+
+            return ("STANDBY", f"Hot Standby: Ready for instant sub-500ms failover (Ping: {u.rtt_ms:.0f} ms).")
 
     def apply_routing(self, force: bool = False) -> None:
         """Push interface metrics so the preferred link wins the default route."""
@@ -294,14 +438,20 @@ class RouterEngine:
 
         mapping: Dict[str, int] = {}
         others = [u for u in self.candidates() if u.name != pref.name]
-        mapping[pref.name] = self.cfg.uplink(pref.name).base_metric or 10
+        pref_cfg = self.cfg.uplink(pref.name)
+        pref_metric = pref_cfg.base_metric if pref_cfg.base_metric is not None else 10
+        mapping[pref.name] = pref_metric
 
         def rank(u: Uplink):
             return (u.state != STATE_UP, 0 if not u.adapter.is_wifi else 1,
                     -u.weight, u.rtt_ms or 9999)
 
         for i, u in enumerate(sorted(others, key=rank), start=1):
-            mapping[u.name] = (self.cfg.uplink(pref.name).base_metric or 10) + 10 * i
+            u_base = self.cfg.uplink(u.name).base_metric
+            if u_base is None or u_base <= pref_metric:
+                mapping[u.name] = pref_metric + 10 * i
+            else:
+                mapping[u.name] = max(u_base, pref_metric + 10 * i)
 
         if not force and mapping == self._last_applied:
             return
@@ -328,22 +478,28 @@ class RouterEngine:
         - MODE_AGGREGATE  -> smooth weighted round robin across healthy links
         - MODE_FORCE/AUTO -> the preferred link
         """
+        event_to_log: Optional[Tuple[str, str]] = None
         with self._lock:
             if prefer_name and prefer_name != "auto":
                 u = self.uplinks.get(prefer_name)
                 if u and u.healthy:
                     return u
                 if u and not u.healthy:
-                    self.log_event("warning",
+                    event_to_log = ("warning",
                                    f"Rule target {prefer_name} is down; spilling to failover")
 
             if self.cfg.mode == MODE_AGGREGATE:
                 healthy = self.healthy_uplinks()
                 if not healthy:
-                    return None
-                return self._swrr(healthy)
+                    selected = None
+                else:
+                    selected = self._swrr(healthy)
+            else:
+                selected = self.preferred_uplink()
 
-            return self.preferred_uplink()
+        if event_to_log:
+            self.log_event(*event_to_log)
+        return selected
 
     def _swrr(self, pool: List[Uplink]) -> Uplink:
         """Smooth weighted round robin (nginx algorithm): spreads load in the
@@ -358,7 +514,7 @@ class RouterEngine:
             total += w
             if best_val is None or cur > best_val:
                 best, best_val = u, cur
-        assert best is not None
+            assert best is not None
         self._rr_state[best.name] = self._rr_state[best.name] - total
         return best
 
@@ -368,6 +524,11 @@ class RouterEngine:
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
+        if self.cfg.manage_metrics:
+            try:
+                self.adapters.reconcile_startup_metrics()
+            except Exception as e:
+                log.warning("startup metric reconciliation failed: %s", e)
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, name="omninet-monitor", daemon=True)
         self._thread.start()

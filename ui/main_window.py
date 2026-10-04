@@ -701,12 +701,15 @@ class MainWindow(QMainWindow):
                 continue
             names.append(name)
             rate = self.svc.stats.rate_for(name)
+            badge_text, info_tooltip = router.explain_uplink_status(name)
             card.update_state(
                 state=u.state, ip=u.ip, gateway=u.adapter.gateway,
                 description=u.adapter.description, rtt=u.rtt_ms, loss=u.loss_pct,
                 metric=u.adapter.if_metric, conns=u.active_conns,
                 down_bps=rate.rx_bps, up_bps=rate.tx_bps,
-                preferred=bool(pref and pref.name == name))
+                preferred=bool(pref and pref.name == name),
+                badge_text=badge_text,
+                info_tooltip=info_tooltip)
 
         rx, tx = self.svc.stats.totals(names)
         self.total_down.setText(f"↓ {human_bps(rx)}")

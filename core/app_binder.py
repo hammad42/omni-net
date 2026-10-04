@@ -226,6 +226,7 @@ class TransparentRedirector:
         self.proxy_port = proxy_port
         self.table: Dict[int, Tuple[str, int]] = {}    # client port -> (orig dst ip, port)
         self._client_src: Dict[int, str] = {}          # client port -> original src ip
+        self._timestamps: Dict[int, float] = {}        # client port -> timestamp
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self.running = False
@@ -303,12 +304,19 @@ class TransparentRedirector:
 
         # Forward path: client -> Internet
         if p.tcp and p.tcp.syn and not p.tcp.ack:
+            now = time.time()
             self.table[p.src_port] = (p.dst_addr, p.dst_port)
             self._client_src[p.src_port] = p.src_addr
+            self._timestamps[p.src_port] = now
             if len(self.table) > 4096:
-                for k in list(self.table)[:1024]:
+                cutoff = now - 300.0
+                stale = [k for k, t in self._timestamps.items() if t < cutoff]
+                if not stale:
+                    stale = list(self.table)[:1024]
+                for k in stale:
                     self.table.pop(k, None)
                     self._client_src.pop(k, None)
+                    self._timestamps.pop(k, None)
         if p.src_port not in self.table:
             return
         p.src_addr = "127.0.0.1"
