@@ -146,8 +146,8 @@ class RouterEngine:
         self._last_applied: Dict[str, int] = {}
         self._current_preferred: Optional[str] = None  # sticky routing: name of current preferred link
         self._preferred_reason: str = ""
-        self._preferred_code: str = ""
         self._probe_gen: int = 0
+        self.target_latencies: Dict[str, Optional[float]] = {}
 
         self.on_change: Optional[Callable[[], None]] = None
         self.on_event: Optional[Callable[[str, str], None]] = None   # (level, message)
@@ -235,9 +235,15 @@ class RouterEngine:
                 break
             timeout = min(self.cfg.probe_timeout_s, max(0.2, rem))
             host, _, port = target.partition(":")
-            rtt = tcp_probe(host.strip(), int(port or 443), probe_ip, probe_if_index, timeout)
+            try:
+                probe_port = int(port.strip()) if port.strip() else 443
+            except ValueError:
+                probe_port = 443
+            rtt = tcp_probe(host.strip(), probe_port, probe_ip, probe_if_index, timeout)
             results.append(rtt)
             if rtt is not None:
+                with self._lock:
+                    self.target_latencies[target] = rtt
                 break          # one success is enough; don't burn the timeout
 
         ok = any(r is not None for r in results)
@@ -282,6 +288,47 @@ class RouterEngine:
         deadline = time.time() + self.cfg.probe_timeout_s * 2 + 0.5
         for t in threads:
             t.join(max(0.05, deadline - time.time()))
+
+    def probe_all_targets(self) -> Dict[str, Optional[float]]:
+        """Probe all currently configured targets in parallel to measure live RTT."""
+        targets = list(self.cfg.probe_targets)
+        custom = getattr(self.cfg, "custom_probe_target", "").strip()
+        if custom:
+            norm_custom = custom if ":" in custom else f"{custom}:443"
+            if norm_custom not in targets:
+                targets.append(norm_custom)
+
+        if not targets:
+            return {}
+
+        pref = self.preferred_uplink()
+        probe_ip = pref.ip if pref else ""
+        probe_if_index = pref.if_index if pref else 0
+
+        results: Dict[str, Optional[float]] = {}
+
+        def _check_one(tgt: str) -> None:
+            host, _, port = tgt.partition(":")
+            try:
+                p = int(port.strip()) if port.strip() else 443
+            except ValueError:
+                p = 443
+            try:
+                rtt = tcp_probe(host.strip(), p, probe_ip, probe_if_index, timeout=1.5)
+                results[tgt] = rtt
+            except Exception:
+                results[tgt] = None
+
+        threads = [threading.Thread(target=_check_one, args=(tgt,), daemon=True)
+                   for tgt in targets]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=1.6)
+
+        with self._lock:
+            self.target_latencies.update(results)
+        return dict(results)
 
     # ------------------------------------------------------------------ #
     # Route policy
@@ -561,6 +608,8 @@ class RouterEngine:
                     self.apply_routing(force=True)      # state flip: react now
                 else:
                     self.apply_routing()
+
+                self.probe_all_targets()
 
                 if self.on_change:
                     self.on_change()

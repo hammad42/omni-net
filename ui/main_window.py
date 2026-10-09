@@ -85,6 +85,7 @@ class MainWindow(QMainWindow):
         self.timer.timeout.connect(self.refresh)
         self.timer.start(1000)
         QTimer.singleShot(400, self.rebuild_uplinks)
+        QTimer.singleShot(600, lambda: threading.Thread(target=self.svc.router.probe_all_targets, daemon=True).start())
 
     # ------------------------------------------------------------------ #
     # Header / mode switcher
@@ -566,14 +567,63 @@ class MainWindow(QMainWindow):
             ("8.8.8.8:443",       "Google DNS  (8.8.8.8:443)"),
             ("20.219.1.1:443",    "Azure Central India / Pune  (20.219.1.1:443)"),
             ("20.43.132.128:443", "Azure SE Asia / Singapore  (20.43.132.128:443)"),
+            ("20.60.197.33:443",  "Azure West Europe / Netherlands  (20.60.197.33:443)"),
         ]
         self.probe_checks: Dict[str, QCheckBox] = {}
+        self.probe_rtt_labels: Dict[str, QLabel] = {}
         for target, label in self._probe_targets_map:
+            row = QHBoxLayout()
             cb = QCheckBox(label)
             cb.setObjectName(f"probe_{target}")
             cb.setChecked(target in self.cfg.probe_targets)
-            lay.addWidget(cb)
+            cb.toggled.connect(self._update_probe_rtt_labels)
+
+            lbl = QLabel("")
+            lbl.setObjectName(f"rtt_{target}")
+            lbl.setStyleSheet("font-size: 13px; font-weight: 600; margin-left: 8px;")
+
+            row.addWidget(cb)
+            row.addWidget(lbl)
+            row.addStretch(1)
+            lay.addLayout(row)
+
             self.probe_checks[target] = cb
+            self.probe_rtt_labels[target] = lbl
+
+        # Designated / Custom probe target row
+        preset_set = {t for t, _ in self._probe_targets_map}
+        custom_saved = getattr(self.cfg, "custom_probe_target", "")
+        if not custom_saved:
+            for t in self.cfg.probe_targets:
+                if t not in preset_set:
+                    custom_saved = t
+                    break
+
+        custom_row = QHBoxLayout()
+        self.cb_custom_probe = QCheckBox("Designated custom server:")
+        self.cb_custom_probe.setObjectName("probe_custom_cb")
+        self.cb_custom_probe.toggled.connect(self._update_probe_rtt_labels)
+        self.input_custom_probe = QLineEdit()
+        self.input_custom_probe.setObjectName("probe_custom_input")
+        self.input_custom_probe.setPlaceholderText("IP:port or domain:port (e.g. 198.51.100.1:443)")
+        self.input_custom_probe.setText(custom_saved)
+        self.input_custom_probe.setMaximumWidth(320)
+        self.input_custom_probe.textChanged.connect(self._update_probe_rtt_labels)
+
+        self.custom_rtt_lbl = QLabel("")
+        self.custom_rtt_lbl.setObjectName("rtt_custom")
+        self.custom_rtt_lbl.setStyleSheet("font-size: 13px; font-weight: 600; margin-left: 8px;")
+
+        # Check if custom target is currently active in probe_targets
+        norm_custom = custom_saved if ":" in custom_saved else (f"{custom_saved}:443" if custom_saved else "")
+        is_custom_checked = bool(custom_saved and (custom_saved in self.cfg.probe_targets or norm_custom in self.cfg.probe_targets))
+        self.cb_custom_probe.setChecked(is_custom_checked)
+
+        custom_row.addWidget(self.cb_custom_probe)
+        custom_row.addWidget(self.input_custom_probe)
+        custom_row.addWidget(self.custom_rtt_lbl)
+        custom_row.addStretch(1)
+        lay.addLayout(custom_row)
 
         # RTT switch threshold
         threshold_form = QFormLayout()
@@ -594,10 +644,16 @@ class MainWindow(QMainWindow):
         holder.setLayout(self.weights_box)
         lay.addWidget(holder)
 
-        save_btn = QPushButton("Apply and save")
-        save_btn.setProperty("accent", "true")
-        save_btn.clicked.connect(self._save_settings)
-        lay.addWidget(save_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        save_row = QHBoxLayout()
+        self.save_btn = QPushButton("Apply and save")
+        self.save_btn.setProperty("accent", "true")
+        self.save_btn.clicked.connect(self._save_settings)
+        self.save_feedback_lbl = QLabel("")
+        self.save_feedback_lbl.setStyleSheet(f"color: {theme.GREEN}; font-weight: bold; margin-left: 8px;")
+        save_row.addWidget(self.save_btn)
+        save_row.addWidget(self.save_feedback_lbl)
+        save_row.addStretch(1)
+        lay.addLayout(save_row)
         lay.addStretch(1)
         return w
 
@@ -637,6 +693,29 @@ class MainWindow(QMainWindow):
 
         # Rebuild probe_targets from checkboxes (preserve order; require ≥1)
         selected = [t for t, cb in self.probe_checks.items() if cb.isChecked()]
+
+        custom_raw = self.input_custom_probe.text().strip()
+        custom_normalized = ""
+        if custom_raw:
+            if ":" in custom_raw:
+                host_part, _, port_part = custom_raw.partition(":")
+                try:
+                    int(port_part.strip())
+                    custom_normalized = f"{host_part.strip()}:{port_part.strip()}"
+                except ValueError:
+                    self._on_event("warning", f"Invalid port in custom target '{custom_raw}' — defaulting to port 443")
+                    custom_normalized = f"{host_part.strip()}:443"
+            else:
+                custom_normalized = f"{custom_raw}:443"
+        self.cfg.custom_probe_target = custom_raw
+
+        if self.cb_custom_probe.isChecked():
+            if custom_normalized:
+                if custom_normalized not in selected:
+                    selected.append(custom_normalized)
+            else:
+                self._on_event("warning", "Custom designated target is checked but empty — please specify an IP:port.")
+
         if not selected:
             self._on_event("warning", "At least one probe target must be selected — keeping previous targets")
         else:
@@ -659,9 +738,18 @@ class MainWindow(QMainWindow):
 
         save_config(self.cfg)
         self.svc.router.sync_uplinks()
+        threading.Thread(target=self.svc.router.probe_all_targets, daemon=True).start()
         if restart_proxy:
             self._on_event("warning", "Restart OmniNet for the new proxy ports to take effect")
         self._on_event("info", "Settings saved")
+
+        if hasattr(self, "save_btn") and hasattr(self, "save_feedback_lbl"):
+            self.save_btn.setText("✓ Saved!")
+            self.save_feedback_lbl.setText("Settings applied & saved!")
+            QTimer.singleShot(2500, lambda: (
+                self.save_btn.setText("Apply and save"),
+                self.save_feedback_lbl.setText("")
+            ))
 
     # ------------------------------------------------------------------ #
     # Log
@@ -692,6 +780,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ #
     def refresh(self) -> None:
         self.sync_cards()
+        self._update_probe_rtt_labels()
         router = self.svc.router
         pref = router.preferred_uplink()
         names = []
@@ -733,6 +822,55 @@ class MainWindow(QMainWindow):
             f"failed dials {st.failed_conns}   ·   "
             f"preferred: {pref.display if pref else 'none'}")
         self._sync_mode_buttons()
+
+    def _update_probe_rtt_labels(self) -> None:
+        if not hasattr(self, "probe_rtt_labels"):
+            return
+        latencies = getattr(self.svc.router, "target_latencies", {})
+
+        def _format_rtt(rtt: Optional[float]) -> Tuple[str, str]:
+            if rtt is None:
+                return ("Timeout", theme.RED)
+            val = round(rtt)
+            if val < 100:
+                color = theme.GREEN
+            elif val <= 200:
+                color = theme.AMBER
+            else:
+                color = theme.RED
+            return (f"{val} ms", color)
+
+        for target, cb in self.probe_checks.items():
+            lbl = self.probe_rtt_labels.get(target)
+            if not lbl:
+                continue
+            if not cb.isChecked():
+                lbl.setText("")
+                continue
+            if target in latencies:
+                txt, col = _format_rtt(latencies[target])
+                lbl.setStyleSheet(f"color: {col}; font-size: 13px; font-weight: 600; margin-left: 8px;")
+                lbl.setText(txt)
+            else:
+                lbl.setStyleSheet(f"color: {theme.TEXT_DIM}; font-size: 13px; margin-left: 8px;")
+                lbl.setText("...")
+
+        if hasattr(self, "cb_custom_probe") and hasattr(self, "custom_rtt_lbl"):
+            if not self.cb_custom_probe.isChecked():
+                self.custom_rtt_lbl.setText("")
+            else:
+                raw = self.input_custom_probe.text().strip()
+                norm = raw if ":" in raw else (f"{raw}:443" if raw else "")
+                rtt = latencies.get(raw) if raw in latencies else latencies.get(norm)
+                if (norm in latencies) or (raw in latencies):
+                    txt, col = _format_rtt(rtt)
+                    self.custom_rtt_lbl.setStyleSheet(f"color: {col}; font-size: 13px; font-weight: 600; margin-left: 8px;")
+                    self.custom_rtt_lbl.setText(txt)
+                elif raw:
+                    self.custom_rtt_lbl.setStyleSheet(f"color: {theme.TEXT_DIM}; font-size: 13px; margin-left: 8px;")
+                    self.custom_rtt_lbl.setText("...")
+                else:
+                    self.custom_rtt_lbl.setText("")
 
     # ------------------------------------------------------------------ #
     def closeEvent(self, ev: QCloseEvent) -> None:
